@@ -1,0 +1,72 @@
+{
+  "_comment": "上海工资计算器参数配置（2026 社保年度：2026.7.1 - 2027.6.30）。如需切换年度，直接修改本文件数值即可。",
+  "_sources": {
+    "social_base": "上海市人社局 2026-08-18 公告（社平 12577 × 60%/300%）",
+    "housing_base": "沪公积金管委会〔2026〕3 号（下限=月最低工资，上限=社平 3 倍）",
+    "housing_ratio": "沪公积金管委会〔2026〕3 号（上海口径 5%~7%，超出部分走补充公积金 1%~5%）",
+    "bonus_policy": "财政部 税务总局公告 2023 年第 30 号（单独计税优惠延续至 2027-12-31）"
+  },
+
+  "social_base": {
+    "lower": 7546,
+    "upper": 37731
+  },
+  "housing_base": {
+    "lower": 2740,
+    "upper": 37731
+  },
+
+  "social_rate": {
+    "pension_emp": 0.08,
+    "pension_org": 0.16,
+    "medical_emp": 0.02,
+    "medical_org": 0.09,
+    "unemploy_emp": 0.005,
+    "unemploy_org": 0.005,
+    "injury_org": 0.0016
+  },
+
+  "housing": {
+    "min_pct": 5,
+    "max_pct": 7,
+    "default_pct": 7
+  },
+  "extra_housing": {
+    "min_pct": 1,
+    "max_pct": 5
+  },
+
+  "tax_brackets": [
+    [36000, 0.03, 0],
+    [144000, 0.10, 2520],
+    [300000, 0.20, 16920],
+    [420000, 0.25, 31920],
+    [660000, 0.30, 52920],
+    [960000, 0.35, 85920],
+    [null, 0.45, 181920]
+  ],
+  "bonus_brackets": [
+    [3000, 0.03, 0],
+    [12000, 0.10, 210],
+    [25000, 0.20, 1410],
+    [35000, 0.25, 2660],
+    [55000, 0.30, 4410],
+    [80000, 0.35, 7160],
+    [null, 0.45, 15160]
+  ],
+  "tax_free_monthly": 5000,
+
+  "special_deductions": {
+    "child_edu": 2000,
+    "continuing_edu": 400,
+    "medical_annual_cap": 80000,
+    "medical_threshold": 15000,
+    "mortgage_int": 1000,
+    "rent_tier1": 1500,
+    "rent_tier2": 1100,
+    "rent_tier3": 800,
+    "elderly_only": 3000,
+    "elderly_share": 1500,
+    "baby_care": 2000
+  }
+}

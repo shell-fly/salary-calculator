@@ -1,0 +1,250 @@
+{
+  "_comment": "china-salary-calculator 参数表（8 城市 × 多年度 × 半年度）。数据来源见 _sources；如需新增年度，在对应城市 years 下追加即可。",
+  "_sources": {
+    "social_base": "各市人社局/人社局公告（社平工资 × 60%/300%，通常每年 7-8 月公布下一社保年度）",
+    "housing_base": "各市公积金管委会公告（下限多为月最低工资，上限 = 社平 3 倍）",
+    "housing_ratio": "上海 5%~7%（沪公积金管委会〔2026〕3 号）；其余城市多为 5%~12% 全国通用口径",
+    "bonus_policy": "财政部 税务总局公告 2023 年第 30 号（全年一次性奖金单独计税优惠延续至 2027-12-31）",
+    "tax_brackets": "个人所得税法（综合所得 7 级年表，3%~45%）"
+  },
+
+  "default_city": "shanghai",
+  "default_year": 2026,
+
+  "cities": {
+    "shanghai": {
+      "name": "上海",
+      "rent_deduction": 1500,
+      "housing_rate": [5, 7],
+      "supplemental_housing_rate": [1, 5],
+      "social_rate": {
+        "pension_emp": 0.08, "pension_org": 0.16,
+        "medical_emp": 0.02, "medical_org": 0.09,
+        "unemploy_emp": 0.005, "unemploy_org": 0.005,
+        "injury_org": 0.0016
+      },
+      "years": {
+        "2025": {
+          "verified_on": "2025-08-18",
+          "h1": { "months": [1, 6],  "social_base": [7384, 36921], "housing_base": [2690, 36921] },
+          "h2": { "months": [7, 12], "social_base": [7460, 37302], "housing_base": [2690, 37302] }
+        },
+        "2026": {
+          "verified_on": "2026-08-18",
+          "h1": { "months": [1, 6],  "social_base": [7460, 37302], "housing_base": [2690, 37302] },
+          "h2": { "months": [7, 12], "social_base": [7546, 37731], "housing_base": [2740, 37731] }
+        }
+      }
+    },
+    "beijing": {
+      "name": "北京",
+      "rent_deduction": 1500,
+      "housing_rate": [5, 12],
+      "supplemental_housing_rate": [0, 12],
+      "social_rate": {
+        "pension_emp": 0.08, "pension_org": 0.16,
+        "medical_emp": 0.02, "medical_org": 0.10,
+        "unemploy_emp": 0.005, "unemploy_org": 0.005,
+        "injury_org": 0.002
+      },
+      "years": {
+        "2025": {
+          "verified_on": "2025-07-10",
+          "h1": { "months": [1, 6],  "social_base": [6821, 35283], "housing_base": [2420, 35283] },
+          "h2": { "months": [7, 12], "social_base": [7162, 35811], "housing_base": [2540, 35811] }
+        },
+        "2026": {
+          "verified_on": "2026-07-15",
+          "h1": { "months": [1, 6],  "social_base": [7162, 35811], "housing_base": [2540, 35811] },
+          "h2": { "months": [7, 12], "social_base": [7270, 36348], "housing_base": [2540, 36348], "provisional": true }
+        }
+      }
+    },
+    "guangzhou": {
+      "name": "广州",
+      "rent_deduction": 1500,
+      "housing_rate": [5, 12],
+      "supplemental_housing_rate": [0, 12],
+      "social_rate": {
+        "pension_emp": 0.08, "pension_org": 0.16,
+        "medical_emp": 0.02, "medical_org": 0.08,
+        "unemploy_emp": 0.002, "unemploy_org": 0.008,
+        "injury_org": 0.002
+      },
+      "years": {
+        "2025": {
+          "verified_on": "2025-07-01",
+          "h1": { "months": [1, 6],  "social_base": [5500, 27501], "housing_base": [2500, 39579] },
+          "h2": { "months": [7, 12], "social_base": [5510, 27549], "housing_base": [2500, 39828] }
+        },
+        "2026": {
+          "verified_on": "2026-07-01",
+          "h1": { "months": [1, 6],  "social_base": [5510, 27549], "housing_base": [2500, 39828] },
+          "h2": { "months": [7, 12], "social_base": [5510, 27549], "housing_base": [2500, 39828], "provisional": true }
+        }
+      }
+    },
+    "hangzhou": {
+      "name": "杭州",
+      "rent_deduction": 1500,
+      "housing_rate": [5, 12],
+      "supplemental_housing_rate": [0, 12],
+      "social_rate": {
+        "pension_emp": 0.08, "pension_org": 0.16,
+        "medical_emp": 0.02, "medical_org": 0.095,
+        "unemploy_emp": 0.005, "unemploy_org": 0.005,
+        "injury_org": 0.002
+      },
+      "years": {
+        "2025": {
+          "verified_on": "2025-07-01",
+          "h1": { "months": [1, 6],  "social_base": [4812, 24060], "housing_base": [2490, 38390] },
+          "h2": { "months": [7, 12], "social_base": [4986, 25299], "housing_base": [2490, 39530] }
+        },
+        "2026": {
+          "verified_on": "2026-07-01",
+          "h1": { "months": [1, 6],  "social_base": [4986, 25299], "housing_base": [2490, 39530] },
+          "h2": { "months": [7, 12], "social_base": [4986, 25299], "housing_base": [2490, 40694], "provisional": true }
+        }
+      }
+    },
+    "shenzhen": {
+      "name": "深圳",
+      "rent_deduction": 1500,
+      "housing_rate": [5, 12],
+      "supplemental_housing_rate": [0, 12],
+      "social_rate": {
+        "pension_emp": 0.08, "pension_org": 0.16,
+        "medical_emp": 0.02, "medical_org": 0.055,
+        "unemploy_emp": 0.003, "unemploy_org": 0.007,
+        "injury_org": 0.0014
+      },
+      "years": {
+        "2025": {
+          "verified_on": "2025-07-01",
+          "h1": { "months": [1, 6],
+                  "social_base": { "pension": [3523, 27501], "medical": [7778, 38892], "unemployment": [2360, 41190] },
+                  "housing_base": [2360, 41190] },
+          "h2": { "months": [7, 12],
+                  "social_base": { "pension": [4775, 27549], "medical": [6733, 33666], "unemployment": [2520, 44934] },
+                  "housing_base": [2520, 44934] }
+        },
+        "2026": {
+          "verified_on": "2026-07-01",
+          "h1": { "months": [1, 6],
+                  "social_base": { "pension": [4775, 27549], "medical": [6733, 33666], "unemployment": [2520, 44934] },
+                  "housing_base": [2520, 44934] },
+          "h2": { "months": [7, 12],
+                  "social_base": { "pension": [4775, 27549], "medical": [6733, 33666], "unemployment": [2520, 44934] },
+                  "housing_base": [2520, 44934], "provisional": true }
+        }
+      }
+    },
+    "nanjing": {
+      "name": "南京",
+      "rent_deduction": 1500,
+      "housing_rate": [5, 12],
+      "supplemental_housing_rate": [0, 12],
+      "social_rate": {
+        "pension_emp": 0.08, "pension_org": 0.16,
+        "medical_emp": 0.02, "medical_org": 0.09,
+        "unemploy_emp": 0.005, "unemploy_org": 0.005,
+        "injury_org": 0.002
+      },
+      "years": {
+        "2025": {
+          "verified_on": "2025-07-01",
+          "h1": { "months": [1, 6],  "social_base": [4952, 24762], "housing_base": [2490, 39900] },
+          "h2": { "months": [7, 12], "social_base": [4952, 24762], "housing_base": [2490, 41400] }
+        },
+        "2026": {
+          "verified_on": "2026-07-01",
+          "h1": { "months": [1, 6],  "social_base": [4952, 24762], "housing_base": [2660, 41400] },
+          "h2": { "months": [7, 12], "social_base": [4952, 24762], "housing_base": [2660, 42400], "provisional": true }
+        }
+      }
+    },
+    "hefei": {
+      "name": "合肥",
+      "rent_deduction": 1500,
+      "housing_rate": [5, 12],
+      "supplemental_housing_rate": [0, 12],
+      "social_rate": {
+        "pension_emp": 0.08, "pension_org": 0.16,
+        "medical_emp": 0.02, "medical_org": 0.085,
+        "unemploy_emp": 0.005, "unemploy_org": 0.005,
+        "injury_org": 0.002
+      },
+      "years": {
+        "2025": {
+          "verified_on": "2025-07-01",
+          "h1": { "months": [1, 6],  "social_base": [4311, 21556], "housing_base": [2060, 28004] },
+          "h2": { "months": [7, 12], "social_base": [4311, 21556], "housing_base": [2320, 29782] }
+        },
+        "2026": {
+          "verified_on": "2026-07-01",
+          "h1": { "months": [1, 6],  "social_base": [4311, 21556], "housing_base": [2320, 29782] },
+          "h2": { "months": [7, 12], "social_base": [4311, 21556], "housing_base": [2320, 29782], "provisional": true }
+        }
+      }
+    },
+    "wuhu": {
+      "name": "芜湖",
+      "rent_deduction": 1100,
+      "housing_rate": [5, 12],
+      "supplemental_housing_rate": [0, 12],
+      "social_rate": {
+        "pension_emp": 0.08, "pension_org": 0.16,
+        "medical_emp": 0.02, "medical_org": 0.085,
+        "unemploy_emp": 0.005, "unemploy_org": 0.005,
+        "injury_org": 0.002
+      },
+      "years": {
+        "2025": {
+          "verified_on": "2025-07-01",
+          "h1": { "months": [1, 6],  "social_base": [4311, 21556], "housing_base": [1930, 23460] },
+          "h2": { "months": [7, 12], "social_base": [4311, 21556], "housing_base": [2170, 25992] }
+        },
+        "2026": {
+          "verified_on": "2026-07-01",
+          "h1": { "months": [1, 6],  "social_base": [4311, 21556], "housing_base": [2170, 25992] },
+          "h2": { "months": [7, 12], "social_base": [4311, 21556], "housing_base": [2170, 25992], "provisional": true }
+        }
+      }
+    }
+  },
+
+  "tax_brackets": [
+    [36000, 0.03, 0],
+    [144000, 0.10, 2520],
+    [300000, 0.20, 16920],
+    [420000, 0.25, 31920],
+    [660000, 0.30, 52920],
+    [960000, 0.35, 85920],
+    [null, 0.45, 181920]
+  ],
+  "bonus_brackets": [
+    [3000, 0.03, 0],
+    [12000, 0.10, 210],
+    [25000, 0.20, 1410],
+    [35000, 0.25, 2660],
+    [55000, 0.30, 4410],
+    [80000, 0.35, 7160],
+    [null, 0.45, 15160]
+  ],
+  "tax_free_monthly": 5000,
+
+  "special_deductions": {
+    "child_edu": 2000,
+    "continuing_edu": 400,
+    "medical_annual_cap": 80000,
+    "medical_threshold": 15000,
+    "mortgage_int": 1000,
+    "rent_tier1": 1500,
+    "rent_tier2": 1100,
+    "rent_tier3": 800,
+    "elderly_only": 3000,
+    "elderly_share": 1500,
+    "baby_care": 2000
+  }
+}
