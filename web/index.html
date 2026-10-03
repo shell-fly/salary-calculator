@@ -1,0 +1,823 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>China Salary Calculator</title>
+<script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f5f7fa; color: #333; }
+.toolbar { display: flex; align-items: center; gap: 12px; padding: 10px 16px; background: #fff; border-bottom: 1px solid #e0e0e0; flex-wrap: wrap; }
+.toolbar select { padding: 6px 10px; border-radius: 6px; border: 1px solid #ccc; }
+.toolbar button { padding: 6px 12px; border-radius: 6px; border: 1px solid #ccc; background: #fff; cursor: pointer; }
+.toolbar button:hover { background: #f0f0f0; }
+.main { display: flex; gap: 16px; padding: 16px; max-width: 1400px; margin: 0 auto; }
+.panel-left { flex: 0 0 38%; background: #fff; border-radius: 10px; padding: 16px; box-shadow: 0 1px 4px rgba(0,0,0,0.06); }
+.panel-right { flex: 1; background: #fff; border-radius: 10px; padding: 16px; box-shadow: 0 1px 4px rgba(0,0,0,0.06); }
+@media (max-width: 768px) {
+  .main { flex-direction: column; padding: 8px; }
+  .panel-left { flex: none; }
+}
+.tabs { display: flex; gap: 0; border-bottom: 2px solid #eee; margin-bottom: 12px; overflow-x: auto; }
+.tabs button { padding: 8px 14px; border: none; background: none; cursor: pointer; white-space: nowrap; border-bottom: 2px solid transparent; margin-bottom: -2px; }
+.tabs button.active { border-bottom-color: #409eff; color: #409eff; font-weight: 600; }
+table { width: 100%; border-collapse: collapse; font-size: 14px; }
+th, td { padding: 6px 10px; border-bottom: 1px solid #f0f0f0; text-align: right; }
+th:first-child, td:first-child { text-align: left; }
+.highlight { font-size: 24px; font-weight: bold; color: #67c23a; }
+.refund { color: #67c23a; } .owed { color: #f56c6c; }
+label { display: block; margin: 8px 0; }
+input[type="number"] { width: 120px; padding: 4px 8px; border: 1px solid #ccc; border-radius: 4px; }
+.deduction-item { margin: 6px 0; padding: 6px; border-radius: 4px; background: #fafafa; }
+.inverse-panel { margin-top: 16px; padding: 12px; background: #f9f9f9; border-radius: 8px; }
+</style>
+</head>
+<body>
+<div id="app">
+  <!-- Toolbar -->
+  <div class="toolbar">
+    <select v-model="params.city" @change="onCityChange">
+      <option v-for="(c, code) in cfg.cities" :key="code" :value="code">{{ c.name }}</option>
+    </select>
+    <select v-model.number="params.year">
+      <option v-for="y in availableYears" :key="y" :value="y">{{ y }}</option>
+    </select>
+    <button @click="$refs.cfgFile.click()">导入配置</button>
+    <input type="file" accept=".json" ref="cfgFile" hidden @change="importConfig">
+    <button @click="exportCSV">导出CSV</button>
+    <button @click="exportExcel">导出Excel</button>
+    <span style="font-size:12px;color:#909399;">{{ importStatus }}</span>
+  </div>
+
+  <!-- Main Layout -->
+  <div class="main">
+    <!-- Left Panel: Parameters -->
+    <div class="panel-left">
+      <h4 style="margin-bottom:12px;">参数设置</h4>
+      <label>税前月薪 <input type="number" v-model.number="params.salary" min="0" step="100"></label>
+      <label>第几个月 <input type="number" v-model.number="params.month" min="1" max="12"></label>
+      <label>公积金比例 {{ session ? session.housing_rate_min : '' }}%~{{ session ? session.housing_rate_max : '' }}%
+        <input type="number" v-model.number="params.housingPct" :min="session ? session.housing_rate_min : 5" :max="session ? session.housing_rate_max : 12">
+      </label>
+      <template v-if="session && session.extra_max > 0">
+        <label><input type="checkbox" v-model="params.useExtra"> 补充公积金 ({{ session.extra_min }}%~{{ session.extra_max }}%)</label>
+        <input v-if="params.useExtra" type="number" v-model.number="params.extraPct" :min="session.extra_min" :max="session.extra_max">
+      </template>
+      <label>年终奖金额 <input type="number" v-model.number="params.bonus" min="0" step="1000"></label>
+
+      <!-- Special Deductions Placeholder (T4) -->
+      <div style="margin-top:16px;border-top:1px solid #eee;padding-top:12px;">
+        <h4>专项附加扣除</h4>
+        <p style="color:#909399;font-size:13px;">（T4 实现）</p>
+      </div>
+    </div>
+
+    <!-- Right Panel: Results -->
+    <div class="panel-right">
+      <div class="tabs">
+        <button v-for="tab in tabs" :key="tab" :class="{active: activeTab===tab}" @click="activeTab=tab">{{ tab }}</button>
+      </div>
+
+      <!-- Tab: 月度明细 -->
+      <div v-show="activeTab==='月度明细'">
+        <div v-if="monthDetail">
+          <p>{{ session.city_name }} {{ session.year }} | 第{{ monthDetail.month_no }}月 | {{ fmt(monthDetail.salary) }} 元</p>
+          <h5 style="margin:12px 0 6px;">个人五险一金</h5>
+          <table>
+            <tr><th>项目</th><th>比例</th><th>金额</th></tr>
+            <tr><td>养老保险</td><td>{{ (session.pension_emp*100).toFixed(1) }}%</td><td>{{ fmt(monthDetail.pension_p) }}</td></tr>
+            <tr><td>医疗保险</td><td>{{ (session.medical_emp*100).toFixed(1) }}%</td><td>{{ fmt(monthDetail.medical_p) }}</td></tr>
+            <tr><td>失业保险</td><td>{{ (session.unemploy_emp*100).toFixed(1) }}%</td><td>{{ fmt(monthDetail.unemploy_p) }}</td></tr>
+            <tr><td>住房公积金</td><td>{{ params.housingPct }}%</td><td>{{ fmt(monthDetail.housing_p) }}</td></tr>
+            <tr v-if="params.useExtra"><td>补充公积金</td><td>{{ params.extraPct }}%</td><td>{{ fmt(monthDetail.extra_p) }}</td></tr>
+            <tr><td><b>合计</b></td><td></td><td><b>{{ fmt(monthDetail.social_p_total) }}</b></td></tr>
+          </table>
+          <h5 style="margin:12px 0 6px;">个人所得税</h5>
+          <p>累计应纳税所得额: {{ fmt(monthDetail.cum_taxable) }} | 税率: {{ (monthDetail.rate*100).toFixed(0) }}% | 本月税: {{ fmt(monthDetail.month_tax) }}</p>
+          <div class="highlight" style="margin-top:12px;">实发到手: ¥{{ fmt(monthDetail.net) }}</div>
+        </div>
+      </div>
+
+      <!-- Tab: 全年逐月 -->
+      <div v-show="activeTab==='全年逐月'">
+        <div v-if="months12">
+          <table>
+            <tr><th>月份</th><th>半年度</th><th>累计应纳税所得额</th><th>本月个税</th><th>实发到手</th></tr>
+            <tr v-for="m in months12" :key="m.month_no">
+              <td>{{ m.month_no }}</td><td>{{ m.month_no <= 6 ? 'H1' : 'H2' }}</td>
+              <td>{{ fmt(m.cum_taxable) }}</td><td>{{ fmt(m.month_tax) }}</td><td>{{ fmt(m.net) }}</td>
+            </tr>
+          </table>
+          <p style="margin-top:8px;">全年到手合计: <b>{{ fmt(months12.reduce((s,m)=>s+m.net,0)) }}</b></p>
+          <p>全年个税合计: <b>{{ fmt(months12[11].cum_tax) }}</b></p>
+          <p>全年五险一金: <b>{{ fmt(months12.reduce((s,m)=>s+m.social_p_total,0)) }}</b></p>
+        </div>
+      </div>
+
+      <!-- Tab: 年终奖对比 -->
+      <div v-show="activeTab==='年终奖对比'">
+        <p v-if="params.bonus<=0" style="color:#909399;">请在左侧输入年终奖金额</p>
+        <div v-else>
+          <p>（T5 完善展示）</p>
+        </div>
+      </div>
+
+      <!-- Tab: 汇算清缴 -->
+      <div v-show="activeTab==='汇算清缴'">
+        <p style="color:#909399;">（T5 完善展示）</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Inline Compute Engine (from compute.js, export keywords removed) -->
+<script>
+function clamp(v, lo, hi) {
+  return Math.max(lo, Math.min(v, hi));
+}
+
+function roundYuan(v) {
+  return Math.floor(v + 0.5);
+}
+
+function fmt(v) {
+  return Number(v).toFixed(2);
+}
+
+function _toBracket(row) {
+  return [
+    row[0] === null ? Infinity : Number(row[0]),
+    Number(row[1]),
+    Number(row[2])
+  ];
+}
+
+function taxByTable(taxable, table) {
+  if (taxable <= 0) return 0.0;
+  for (const [upper, rate, quick] of table) {
+    if (taxable <= upper) {
+      return taxable * rate - quick;
+    }
+  }
+  return 0.0;
+}
+
+function calcCumulativeTax(cumTaxable, taxBrackets) {
+  return taxByTable(cumTaxable, taxBrackets);
+}
+
+function bonusSingleTax(bonus, salary, bonusBrackets, taxFreeMonthly) {
+  if (bonus <= 0) return 0.0;
+  let base;
+  if (salary >= taxFreeMonthly) {
+    base = bonus;
+  } else {
+    base = Math.max(bonus - (taxFreeMonthly - salary), 0.0);
+  }
+  if (base <= 0) return 0.0;
+  const avg = base / 12.0;
+  for (const [upper, rate, quick] of bonusBrackets) {
+    if (avg <= upper) {
+      return base * rate - quick;
+    }
+  }
+  return base * 0.45 - 181920;
+}
+
+function monthlySpecial(month, items) {
+  let total = 0.0;
+  for (const item of items) {
+    if (item.startMonth <= month && month <= item.endMonth) {
+      total += Number(item.amount);
+    }
+  }
+  return total;
+}
+
+function _normalizeSocial(spec) {
+  if (Array.isArray(spec) && spec.length === 2) {
+    return { pension: spec, medical: spec, unemployment: spec };
+  }
+  if (typeof spec === 'object' && spec !== null && !Array.isArray(spec)) {
+    return {
+      pension: [...spec.pension],
+      medical: [...spec.medical],
+      unemployment: [...spec.unemployment]
+    };
+  }
+  throw new Error("Invalid social_base spec");
+}
+
+function createSession(cityCode, year, CFG) {
+  const taxBrackets = CFG.tax_brackets.map(_toBracket);
+  const bonusBrackets = CFG.bonus_brackets.map(_toBracket);
+  const taxFreeMonthly = Number(CFG.tax_free_monthly);
+
+  cityCode = cityCode || CFG.default_city;
+  year = year ? Number(year) : Number(CFG.default_year);
+
+  if (!(cityCode in CFG.cities)) {
+    throw new Error(`Unsupported city: ${cityCode}`);
+  }
+  const city = CFG.cities[cityCode];
+
+  const yearsMap = {};
+  for (const [k, v] of Object.entries(city.years)) {
+    yearsMap[Number(k)] = v;
+  }
+  if (!(year in yearsMap)) {
+    const avail = Object.keys(yearsMap).map(Number).sort((a, b) => a - b);
+    throw new Error(`City ${city.name} has no data for year ${year}. Available: ${avail}`);
+  }
+  const y = yearsMap[year];
+
+  const supp = city.supplemental_housing_rate || [0, 0];
+
+  const sess = {
+    city_code: cityCode,
+    city_name: city.name,
+    year: year,
+    rent_deduction: Number(city.rent_deduction),
+    housing_rate_min: Number(city.housing_rate[0]),
+    housing_rate_max: Number(city.housing_rate[1]),
+    housing_rate_default: Number(city.housing_rate[1]),
+    extra_min: Number(supp[0]),
+    extra_max: Number(supp[1]),
+
+    pension_emp: Number(city.social_rate.pension_emp),
+    pension_org: Number(city.social_rate.pension_org),
+    medical_emp: Number(city.social_rate.medical_emp),
+    medical_org: Number(city.social_rate.medical_org),
+    unemploy_emp: Number(city.social_rate.unemploy_emp),
+    unemploy_org: Number(city.social_rate.unemploy_org),
+    injury_org: Number(city.social_rate.injury_org || 0),
+
+    taxBrackets,
+    bonusBrackets,
+    taxFreeMonthly,
+
+    _yearData: y,
+
+    periodFor(month) {
+      const m = Number(month);
+      if (m <= y.h1.months[1]) {
+        return ['h1', y.h1];
+      }
+      return ['h2', y.h2];
+    },
+
+    socialBounds(month) {
+      const [, p] = this.periodFor(month);
+      const s = _normalizeSocial(p.social_base);
+      return [
+        Number(s.pension[0]), Number(s.pension[1]),
+        Number(s.medical[0]), Number(s.medical[1]),
+        Number(s.unemployment[0]), Number(s.unemployment[1])
+      ];
+    },
+
+    housingBounds(month) {
+      const [, p] = this.periodFor(month);
+      return [Number(p.housing_base[0]), Number(p.housing_base[1])];
+    },
+
+    isProvisional(month) {
+      const [, p] = this.periodFor(month);
+      return Boolean(p.provisional || false);
+    }
+  };
+
+  return sess;
+}
+
+function computeMonth(sess, monthNo, salary, socialBaseDict, housingBase,
+  specialItems, housingPct, extraPct, CFG) {
+  const taxFreeMonthly = sess.taxFreeMonthly;
+
+  const sbP = socialBaseDict.pension;
+  const sbM = socialBaseDict.medical;
+  const sbU = socialBaseDict.unemployment;
+
+  const pensionP = sbP * sess.pension_emp;
+  const medicalP = sbM * sess.medical_emp;
+  const unemployP = sbU * sess.unemploy_emp;
+  const housingP = roundYuan(housingBase * housingPct / 100.0);
+  const extraP = extraPct ? roundYuan(housingBase * extraPct / 100.0) : 0.0;
+  const socialPTotal = pensionP + medicalP + unemployP + housingP + extraP;
+
+  const pensionO = sbP * sess.pension_org;
+  const medicalO = sbM * sess.medical_org;
+  const unemployO = sbU * sess.unemploy_org;
+  const injuryO = sbP * sess.injury_org;
+  const housingO = roundYuan(housingBase * housingPct / 100.0);
+  const extraO = extraPct ? roundYuan(housingBase * extraPct / 100.0) : 0.0;
+  const socialOTotal = pensionO + medicalO + unemployO + injuryO + housingO + extraO;
+
+  const specialMonthly = monthlySpecial(monthNo, specialItems);
+  const cumIncome = salary * monthNo;
+  const cumBase = taxFreeMonthly * monthNo;
+  const cumSocial = socialPTotal * monthNo;
+  const cumSpecial = specialMonthly * monthNo;
+  const cumTaxable = cumIncome - cumBase - cumSocial - cumSpecial;
+  const cumTax = calcCumulativeTax(cumTaxable, sess.taxBrackets);
+
+  const prevCumTaxable = cumTaxable - salary + taxFreeMonthly + socialPTotal + specialMonthly;
+  const prevCumTax = calcCumulativeTax(prevCumTaxable, sess.taxBrackets);
+  const monthTax = Math.max(0.0, cumTax - prevCumTax);
+
+  const net = salary - socialPTotal - monthTax;
+
+  let rate = 0.0, quick = 0.0;
+  for (const [upper, r, q] of sess.taxBrackets) {
+    if (cumTaxable <= upper) {
+      rate = r;
+      quick = q;
+      break;
+    }
+  }
+
+  return {
+    month_no: monthNo, salary: salary,
+    sb_p: sbP, sb_m: sbM, sb_u: sbU, housing_base: housingBase,
+    pension_p: pensionP, medical_p: medicalP, unemploy_p: unemployP,
+    housing_p: housingP, extra_p: extraP, social_p_total: socialPTotal,
+    pension_o: pensionO, medical_o: medicalO, unemploy_o: unemployO,
+    injury_o: injuryO, housing_o: housingO, extra_o: extraO,
+    social_o_total: socialOTotal,
+    cum_taxable: cumTaxable, cum_tax: cumTax, month_tax: monthTax,
+    rate: rate, quick: quick, net: net,
+    special_monthly: specialMonthly, housing_pct: housingPct, extra_pct: extraPct,
+  };
+}
+
+function computeYear(sess, salary, specialItems, housingPct, extraPct, CFG) {
+  const results = [];
+  for (let m = 1; m <= 12; m++) {
+    const [plo, phi, mlo, mhi, ulo, uhi] = sess.socialBounds(m);
+    const [hlo, hhi] = sess.housingBounds(m);
+    const sb = {
+      pension: clamp(salary, plo, phi),
+      medical: clamp(salary, mlo, mhi),
+      unemployment: clamp(salary, ulo, uhi),
+    };
+    const hb = clamp(salary, hlo, hhi);
+    results.push(computeMonth(sess, m, salary, sb, hb, specialItems, housingPct, extraPct, CFG));
+  }
+  return results;
+}
+
+function compareBonus(salary, socialPMonthly, specialMonthly, bonus, CFG) {
+  const taxFreeMonthly = Number(CFG.tax_free_monthly);
+  const taxBrackets = CFG.tax_brackets.map(_toBracket);
+  const bonusBrackets = CFG.bonus_brackets.map(_toBracket);
+
+  const annualIncome = salary * 12;
+  const annualBase = taxFreeMonthly * 12;
+  const annualSocial = socialPMonthly * 12;
+  const annualSpecial = specialMonthly * 12;
+
+  const salaryTaxA = calcCumulativeTax(
+    annualIncome - annualBase - annualSocial - annualSpecial, taxBrackets
+  );
+  const bonusTaxA = bonusSingleTax(bonus, salary, bonusBrackets, taxFreeMonthly);
+  const totalA = salaryTaxA + bonusTaxA;
+
+  const taxableB = annualIncome + bonus - annualBase - annualSocial - annualSpecial;
+  const totalB = taxByTable(taxableB, taxBrackets);
+
+  return { totalA, totalB, salaryTaxA, bonusTaxA, taxableB };
+}
+
+function estimateAnnualSettlement(months12, CFG, annualMedical = 0.0) {
+  const taxFreeMonthly = Number(CFG.tax_free_monthly);
+  const taxBrackets = CFG.tax_brackets.map(_toBracket);
+
+  const annualGross = months12.reduce((s, m) => s + m.salary, 0);
+  const annualContrib = months12.reduce((s, m) => s + m.social_p_total, 0);
+  const annualSpecial = months12.reduce((s, m) => s + m.special_monthly, 0);
+  const annualTaxable = Math.max(0.0,
+    annualGross - taxFreeMonthly * 12 - annualContrib - annualSpecial - Math.max(0.0, annualMedical)
+  );
+  const annualSettlementTax = calcCumulativeTax(annualTaxable, taxBrackets);
+  const withheldTax = months12[months12.length - 1].cum_tax;
+  const estimatedRefund = withheldTax - annualSettlementTax;
+
+  return { annualTaxable, annualSettlementTax, withheldTax, estimatedRefund };
+}
+
+function inverseGrossFromNet(sess, targetNet, specialItems, housingPct, extraPct,
+  CFG, tol = 0.01, maxIter = 120) {
+  let lo = 0.0, hi = 10_000_000.0;
+  const targetTotal = targetNet * 12.0;
+  let last = null;
+
+  for (let i = 0; i < maxIter; i++) {
+    const mid = (lo + hi) / 2.0;
+    const months = computeYear(sess, mid, specialItems, housingPct, extraPct, CFG);
+    const netTotal = months.reduce((s, m) => s + m.net, 0);
+    last = { mid, months, netTotal };
+
+    if (Math.abs(netTotal - targetTotal) <= tol) break;
+    if (netTotal < targetTotal) {
+      lo = mid;
+    } else {
+      hi = mid;
+    }
+  }
+
+  const { mid, months, netTotal } = last;
+  const taxTotal = months[months.length - 1].cum_tax;
+  const contribTotal = months.reduce((s, m) => s + m.social_p_total, 0);
+
+  return {
+    gross: mid, net_12m: netTotal, tax_12m: taxTotal,
+    contrib_12m: contribTotal, months: months,
+  };
+}
+</script>
+
+<!-- Embedded Config Data -->
+<script type="application/json" id="cfg-data">
+{
+  "_comment": "china-salary-calculator 参数表（8 城市 × 多年度 × 半年度）。数据来源见 _sources；如需新增年度，在对应城市 years 下追加即可。",
+  "_sources": {
+    "social_base": "各市人社局/人社局公告（社平工资 × 60%/300%，通常每年 7-8 月公布下一社保年度）",
+    "housing_base": "各市公积金管委会公告（下限多为月最低工资，上限 = 社平 3 倍）",
+    "housing_ratio": "上海 5%~7%（沪公积金管委会〔2026〕3 号）；其余城市多为 5%~12% 全国通用口径",
+    "bonus_policy": "财政部 税务总局公告 2023 年第 30 号（全年一次性奖金单独计税优惠延续至 2027-12-31）",
+    "tax_brackets": "个人所得税法（综合所得 7 级年表，3%~45%）"
+  },
+
+  "default_city": "shanghai",
+  "default_year": 2026,
+
+  "cities": {
+    "shanghai": {
+      "name": "上海",
+      "rent_deduction": 1500,
+      "housing_rate": [5, 7],
+      "supplemental_housing_rate": [1, 5],
+      "social_rate": {
+        "pension_emp": 0.08, "pension_org": 0.16,
+        "medical_emp": 0.02, "medical_org": 0.09,
+        "unemploy_emp": 0.005, "unemploy_org": 0.005,
+        "injury_org": 0.0016
+      },
+      "years": {
+        "2025": {
+          "verified_on": "2025-08-18",
+          "h1": { "months": [1, 6],  "social_base": [7384, 36921], "housing_base": [2690, 36921] },
+          "h2": { "months": [7, 12], "social_base": [7460, 37302], "housing_base": [2690, 37302] }
+        },
+        "2026": {
+          "verified_on": "2026-08-18",
+          "h1": { "months": [1, 6],  "social_base": [7460, 37302], "housing_base": [2690, 37302] },
+          "h2": { "months": [7, 12], "social_base": [7546, 37731], "housing_base": [2740, 37731] }
+        }
+      }
+    },
+    "beijing": {
+      "name": "北京",
+      "rent_deduction": 1500,
+      "housing_rate": [5, 12],
+      "supplemental_housing_rate": [0, 12],
+      "social_rate": {
+        "pension_emp": 0.08, "pension_org": 0.16,
+        "medical_emp": 0.02, "medical_org": 0.10,
+        "unemploy_emp": 0.005, "unemploy_org": 0.005,
+        "injury_org": 0.002
+      },
+      "years": {
+        "2025": {
+          "verified_on": "2025-07-10",
+          "h1": { "months": [1, 6],  "social_base": [6821, 35283], "housing_base": [2420, 35283] },
+          "h2": { "months": [7, 12], "social_base": [7162, 35811], "housing_base": [2540, 35811] }
+        },
+        "2026": {
+          "verified_on": "2026-07-15",
+          "h1": { "months": [1, 6],  "social_base": [7162, 35811], "housing_base": [2540, 35811] },
+          "h2": { "months": [7, 12], "social_base": [7270, 36348], "housing_base": [2540, 36348], "provisional": true }
+        }
+      }
+    },
+    "guangzhou": {
+      "name": "广州",
+      "rent_deduction": 1500,
+      "housing_rate": [5, 12],
+      "supplemental_housing_rate": [0, 12],
+      "social_rate": {
+        "pension_emp": 0.08, "pension_org": 0.16,
+        "medical_emp": 0.02, "medical_org": 0.08,
+        "unemploy_emp": 0.002, "unemploy_org": 0.008,
+        "injury_org": 0.002
+      },
+      "years": {
+        "2025": {
+          "verified_on": "2025-07-01",
+          "h1": { "months": [1, 6],  "social_base": [5500, 27501], "housing_base": [2500, 39579] },
+          "h2": { "months": [7, 12], "social_base": [5510, 27549], "housing_base": [2500, 39828] }
+        },
+        "2026": {
+          "verified_on": "2026-07-01",
+          "h1": { "months": [1, 6],  "social_base": [5510, 27549], "housing_base": [2500, 39828] },
+          "h2": { "months": [7, 12], "social_base": [5510, 27549], "housing_base": [2500, 39828], "provisional": true }
+        }
+      }
+    },
+    "hangzhou": {
+      "name": "杭州",
+      "rent_deduction": 1500,
+      "housing_rate": [5, 12],
+      "supplemental_housing_rate": [0, 12],
+      "social_rate": {
+        "pension_emp": 0.08, "pension_org": 0.16,
+        "medical_emp": 0.02, "medical_org": 0.095,
+        "unemploy_emp": 0.005, "unemploy_org": 0.005,
+        "injury_org": 0.002
+      },
+      "years": {
+        "2025": {
+          "verified_on": "2025-07-01",
+          "h1": { "months": [1, 6],  "social_base": [4812, 24060], "housing_base": [2490, 38390] },
+          "h2": { "months": [7, 12], "social_base": [4986, 25299], "housing_base": [2490, 39530] }
+        },
+        "2026": {
+          "verified_on": "2026-07-01",
+          "h1": { "months": [1, 6],  "social_base": [4986, 25299], "housing_base": [2490, 39530] },
+          "h2": { "months": [7, 12], "social_base": [4986, 25299], "housing_base": [2490, 40694], "provisional": true }
+        }
+      }
+    },
+    "shenzhen": {
+      "name": "深圳",
+      "rent_deduction": 1500,
+      "housing_rate": [5, 12],
+      "supplemental_housing_rate": [0, 12],
+      "social_rate": {
+        "pension_emp": 0.08, "pension_org": 0.16,
+        "medical_emp": 0.02, "medical_org": 0.055,
+        "unemploy_emp": 0.003, "unemploy_org": 0.007,
+        "injury_org": 0.0014
+      },
+      "years": {
+        "2025": {
+          "verified_on": "2025-07-01",
+          "h1": { "months": [1, 6],
+                  "social_base": { "pension": [3523, 27501], "medical": [7778, 38892], "unemployment": [2360, 41190] },
+                  "housing_base": [2360, 41190] },
+          "h2": { "months": [7, 12],
+                  "social_base": { "pension": [4775, 27549], "medical": [6733, 33666], "unemployment": [2520, 44934] },
+                  "housing_base": [2520, 44934] }
+        },
+        "2026": {
+          "verified_on": "2026-07-01",
+          "h1": { "months": [1, 6],
+                  "social_base": { "pension": [4775, 27549], "medical": [6733, 33666], "unemployment": [2520, 44934] },
+                  "housing_base": [2520, 44934] },
+          "h2": { "months": [7, 12],
+                  "social_base": { "pension": [4775, 27549], "medical": [6733, 33666], "unemployment": [2520, 44934] },
+                  "housing_base": [2520, 44934], "provisional": true }
+        }
+      }
+    },
+    "nanjing": {
+      "name": "南京",
+      "rent_deduction": 1500,
+      "housing_rate": [5, 12],
+      "supplemental_housing_rate": [0, 12],
+      "social_rate": {
+        "pension_emp": 0.08, "pension_org": 0.16,
+        "medical_emp": 0.02, "medical_org": 0.09,
+        "unemploy_emp": 0.005, "unemploy_org": 0.005,
+        "injury_org": 0.002
+      },
+      "years": {
+        "2025": {
+          "verified_on": "2025-07-01",
+          "h1": { "months": [1, 6],  "social_base": [4952, 24762], "housing_base": [2490, 39900] },
+          "h2": { "months": [7, 12], "social_base": [4952, 24762], "housing_base": [2490, 41400] }
+        },
+        "2026": {
+          "verified_on": "2026-07-01",
+          "h1": { "months": [1, 6],  "social_base": [4952, 24762], "housing_base": [2660, 41400] },
+          "h2": { "months": [7, 12], "social_base": [4952, 24762], "housing_base": [2660, 42400], "provisional": true }
+        }
+      }
+    },
+    "hefei": {
+      "name": "合肥",
+      "rent_deduction": 1500,
+      "housing_rate": [5, 12],
+      "supplemental_housing_rate": [0, 12],
+      "social_rate": {
+        "pension_emp": 0.08, "pension_org": 0.16,
+        "medical_emp": 0.02, "medical_org": 0.085,
+        "unemploy_emp": 0.005, "unemploy_org": 0.005,
+        "injury_org": 0.002
+      },
+      "years": {
+        "2025": {
+          "verified_on": "2025-07-01",
+          "h1": { "months": [1, 6],  "social_base": [4311, 21556], "housing_base": [2060, 28004] },
+          "h2": { "months": [7, 12], "social_base": [4311, 21556], "housing_base": [2320, 29782] }
+        },
+        "2026": {
+          "verified_on": "2026-07-01",
+          "h1": { "months": [1, 6],  "social_base": [4311, 21556], "housing_base": [2320, 29782] },
+          "h2": { "months": [7, 12], "social_base": [4311, 21556], "housing_base": [2320, 29782], "provisional": true }
+        }
+      }
+    },
+    "wuhu": {
+      "name": "芜湖",
+      "rent_deduction": 1100,
+      "housing_rate": [5, 12],
+      "supplemental_housing_rate": [0, 12],
+      "social_rate": {
+        "pension_emp": 0.08, "pension_org": 0.16,
+        "medical_emp": 0.02, "medical_org": 0.085,
+        "unemploy_emp": 0.005, "unemploy_org": 0.005,
+        "injury_org": 0.002
+      },
+      "years": {
+        "2025": {
+          "verified_on": "2025-07-01",
+          "h1": { "months": [1, 6],  "social_base": [4311, 21556], "housing_base": [1930, 23460] },
+          "h2": { "months": [7, 12], "social_base": [4311, 21556], "housing_base": [2170, 25992] }
+        },
+        "2026": {
+          "verified_on": "2026-07-01",
+          "h1": { "months": [1, 6],  "social_base": [4311, 21556], "housing_base": [2170, 25992] },
+          "h2": { "months": [7, 12], "social_base": [4311, 21556], "housing_base": [2170, 25992], "provisional": true }
+        }
+      }
+    }
+  },
+
+  "tax_brackets": [
+    [36000, 0.03, 0],
+    [144000, 0.10, 2520],
+    [300000, 0.20, 16920],
+    [420000, 0.25, 31920],
+    [660000, 0.30, 52920],
+    [960000, 0.35, 85920],
+    [null, 0.45, 181920]
+  ],
+  "bonus_brackets": [
+    [3000, 0.03, 0],
+    [12000, 0.10, 210],
+    [25000, 0.20, 1410],
+    [35000, 0.25, 2660],
+    [55000, 0.30, 4410],
+    [80000, 0.35, 7160],
+    [null, 0.45, 15160]
+  ],
+  "tax_free_monthly": 5000,
+
+  "special_deductions": {
+    "child_edu": 2000,
+    "continuing_edu": 400,
+    "medical_annual_cap": 80000,
+    "medical_threshold": 15000,
+    "mortgage_int": 1000,
+    "rent_tier1": 1500,
+    "rent_tier2": 1100,
+    "rent_tier3": 800,
+    "elderly_only": 3000,
+    "elderly_share": 1500,
+    "baby_care": 2000
+  }
+}
+</script>
+
+<!-- Vue Application -->
+<script>
+const CFG = JSON.parse(document.getElementById('cfg-data').textContent);
+
+const { createApp, reactive, computed, ref } = Vue;
+
+const app = createApp({
+  setup() {
+    const params = reactive({
+      city: CFG.default_city,
+      year: parseInt(CFG.default_year),
+      salary: 20000,
+      month: 1,
+      housingPct: CFG.cities[CFG.default_city].housing_rate[1],
+      extraPct: 0,
+      useExtra: false,
+      bonus: 0,
+      targetNet: 0,
+      specialItems: [],
+    });
+
+    const activeTab = ref('月度明细');
+    const tabs = ['月度明细', '全年逐月', '年终奖对比', '汇算清缴'];
+    const importStatus = ref('');
+
+    // Reactive CFG proxy for template access
+    const cfg = reactive(CFG);
+
+    // Computed: available years for selected city
+    const availableYears = computed(() => {
+      const city = CFG.cities[params.city];
+      if (!city) return [CFG.default_year];
+      return Object.keys(city.years).map(Number).sort((a, b) => b - a);
+    });
+
+    // Computed: session
+    const session = computed(() => {
+      try {
+        return createSession(params.city, params.year, CFG);
+      } catch (e) {
+        console.warn('createSession error:', e.message);
+        return null;
+      }
+    });
+
+    // Computed: active special items (filter enabled ones)
+    const activeSpecialItems = computed(() => {
+      return params.specialItems.filter(item => item.enabled !== false);
+    });
+
+    // Computed: months12
+    const months12 = computed(() => {
+      if (!session.value) return null;
+      return computeYear(session.value, params.salary, activeSpecialItems.value,
+        params.housingPct, params.useExtra ? params.extraPct : 0, CFG);
+    });
+
+    // Computed: monthDetail
+    const monthDetail = computed(() => {
+      if (!months12.value) return null;
+      return months12.value[params.month - 1];
+    });
+
+    // Methods
+    function onCityChange() {
+      const city = CFG.cities[params.city];
+      if (city) {
+        params.housingPct = city.housing_rate[1];
+        // Ensure year is valid for new city
+        const years = Object.keys(city.years).map(Number);
+        if (!years.includes(params.year)) {
+          params.year = years[years.length - 1];
+        }
+      }
+    }
+
+    function importConfig(event) {
+      const file = event.target.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        try {
+          const external = JSON.parse(e.target.result);
+          deepMerge(CFG, external);
+          // Trigger reactivity by updating cfg
+          Object.keys(external).forEach(k => { cfg[k] = external[k]; });
+          importStatus.value = `已加载外部配置：${file.name}（${Object.keys(CFG.cities).length} 城市）`;
+        } catch (err) {
+          alert('JSON 解析失败：' + err.message);
+        }
+      };
+      reader.readAsText(file);
+      // Reset file input
+      event.target.value = '';
+    }
+
+    function deepMerge(target, source) {
+      for (const key of Object.keys(source)) {
+        if (source[key] && typeof source[key] === 'object' && !Array.isArray(source[key])) {
+          if (!target[key]) target[key] = {};
+          deepMerge(target[key], source[key]);
+        } else {
+          target[key] = source[key];
+        }
+      }
+    }
+
+    function exportCSV() {
+      // Placeholder for T7
+      alert('CSV 导出将在 T7 实现');
+    }
+
+    function exportExcel() {
+      // Placeholder for T7
+      alert('Excel 导出将在 T7 实现');
+    }
+
+    return {
+      cfg, params, activeTab, tabs, importStatus,
+      availableYears, session, months12, monthDetail,
+      onCityChange, importConfig, exportCSV, exportExcel,
+      fmt,
+    };
+  }
+});
+
+app.mount('#app');
+</script>
+</body>
+</html>
