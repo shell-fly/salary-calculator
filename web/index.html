@@ -112,6 +112,19 @@ input[type="number"] { width: 120px; padding: 4px 8px; border: 1px solid #ccc; b
           <div v-if="def.mutualGroup && isDeductionEnabled(def.key)" style="font-size:11px;color:#e6a23c;margin-top:4px;">⚠ 与{{ def.mutualLabel }}互斥</div>
         </div>
       </div>
+
+      <!-- Inverse Calculation Panel (T6) -->
+      <div class="inverse-panel">
+        <h4>反推税前月薪</h4>
+        <label>目标月均到手 <input type="number" v-model.number="params.targetNet" @input="onInverseInput" min="0" step="1000"></label>
+        <div v-if="inverseResult">
+          <p>税前月薪 ≈ <b>¥{{ fmt(inverseResult.gross) }}</b></p>
+          <p>全年到手合计 ≈ ¥{{ fmt(inverseResult.net_12m) }}</p>
+          <p>全年个税 ≈ ¥{{ fmt(inverseResult.tax_12m) }}</p>
+          <p>全年五险一金 ≈ ¥{{ fmt(inverseResult.contrib_12m) }}</p>
+          <button @click="params.salary = Math.round(inverseResult.gross)" style="margin-top:8px;padding:6px 12px;border-radius:4px;border:1px solid #409eff;background:#409eff;color:#fff;cursor:pointer;">回填到参数</button>
+        </div>
+      </div>
     </div>
 
     <!-- Right Panel: Results -->
@@ -1061,14 +1074,85 @@ const app = createApp({
       }
     }
 
+    // --- Inverse Calculation (T6) ---
+    const inverseResult = ref(null);
+    let _inverseTimer = null;
+    function onInverseInput() {
+      clearTimeout(_inverseTimer);
+      _inverseTimer = setTimeout(() => {
+        if (params.targetNet <= 0) {
+          inverseResult.value = null;
+          return;
+        }
+        if (!session.value) return;
+        inverseResult.value = inverseGrossFromNet(
+          session.value, params.targetNet, activeSpecialItems.value,
+          params.housingPct, params.useExtra ? params.extraPct : 0, CFG
+        );
+      }, 500);
+    }
+
+    // --- Export Functions (T7) ---
+    const CSV_COLS = [
+      ['月份','month_no'],['半年度','half'],['税前月薪','salary'],
+      ['养老基数','sb_p'],['医疗基数','sb_m'],['失业基数','sb_u'],['公积金基数','housing_base'],
+      ['养老_个人','pension_p'],['医疗_个人','medical_p'],['失业_个人','unemploy_p'],
+      ['公积金_个人','housing_p'],['补充公积金_个人','extra_p'],['五险一金_个人合计','social_p_total'],
+      ['养老_单位','pension_o'],['医疗_单位','medical_o'],['失业_单位','unemploy_o'],
+      ['工伤_单位','injury_o'],['公积金_单位','housing_o'],['补充公积金_单位','extra_o'],
+      ['五险一金_单位合计','social_o_total'],
+      ['专项附加扣除_当月','special_monthly'],
+      ['累计应纳税所得额','cum_taxable'],['累计个税','cum_tax'],
+      ['当月个税','month_tax'],['实发到手','net'],
+    ];
+
     function exportCSV() {
-      // Placeholder for T7
-      alert('CSV 导出将在 T7 实现');
+      const data = months12.value;
+      if (!data || !data.length) return;
+      const header = CSV_COLS.map(([display]) => display).join(',');
+      const rows = data.map(m => {
+        const hk = m.month_no <= 6 ? 'H1' : 'H2';
+        const obj = { ...m, half: hk };
+        return CSV_COLS.map(([_, key]) => {
+          const v = obj[key];
+          return typeof v === 'number' ? v.toFixed(2) : (v ?? '');
+        }).join(',');
+      });
+      const content = '\uFEFF' + header + '\n' + rows.join('\n');
+      const blob = new Blob([content], { type: 'text/csv;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'salary_' + params.city + '_' + params.year + '.csv';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
     }
 
     function exportExcel() {
-      // Placeholder for T7
-      alert('Excel 导出将在 T7 实现');
+      if (window.XLSX) { doExcelExport(); return; }
+      const script = document.createElement('script');
+      script.src = 'https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js';
+      script.onload = () => doExcelExport();
+      script.onerror = () => alert('无法加载 Excel 库（需联网）。请改用 CSV 导出。');
+      document.head.appendChild(script);
+    }
+
+    function doExcelExport() {
+      const data = months12.value;
+      if (!data || !data.length) return;
+      const rows = data.map(m => {
+        const hk = m.month_no <= 6 ? 'H1' : 'H2';
+        const obj = { ...m, half: hk };
+        const row = {};
+        CSV_COLS.forEach(([display, key]) => row[display] = obj[key] ?? '');
+        return row;
+      });
+      const ws = XLSX.utils.json_to_sheet(rows);
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, '逐月明细');
+      XLSX.writeFile(wb, 'salary_' + params.city + '_' + params.year + '.xlsx');
     }
 
     return {
@@ -1078,6 +1162,7 @@ const app = createApp({
       availableYears, session, months12, monthDetail,
       activeSpecialItems, bonusResult, annualMedicalDeduction,
       settlementResult, settlementData,
+      inverseResult, onInverseInput,
       onCityChange, importConfig, exportCSV, exportExcel,
       fmt,
     };
