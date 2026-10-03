@@ -31,6 +31,28 @@ label { display: block; margin: 8px 0; }
 input[type="number"] { width: 120px; padding: 4px 8px; border: 1px solid #ccc; border-radius: 4px; }
 .deduction-item { margin: 6px 0; padding: 6px; border-radius: 4px; background: #fafafa; }
 .inverse-panel { margin-top: 16px; padding: 12px; background: #f9f9f9; border-radius: 8px; }
+.deduction-card { margin: 8px 0; padding: 10px; border: 1px solid #eee; border-radius: 8px; background: #fafafa; }
+.deduction-card.active { border-color: #409eff; background: #f0f7ff; }
+.deduction-card .row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.deduction-card .row label { margin: 0; }
+.deduction-card .fields { margin-top: 6px; font-size: 13px; color: #555; display: flex; gap: 12px; flex-wrap: wrap; align-items: center; }
+.deduction-card .fields input[type="number"] { width: 80px; }
+.deduction-card .amount-hint { font-size: 12px; color: #409eff; margin-left: 4px; }
+.collapse-toggle { cursor: pointer; color: #409eff; font-size: 13px; user-select: none; }
+.compare-cards { display: flex; gap: 16px; flex-wrap: wrap; }
+.compare-card { flex: 1; min-width: 220px; border: 1px solid #e0e0e0; border-radius: 10px; padding: 14px; }
+.compare-card.recommended { border-color: #67c23a; background: #f0fdf0; }
+.compare-card h5 { margin-bottom: 8px; font-size: 14px; }
+.compare-card .line { display: flex; justify-content: space-between; margin: 4px 0; font-size: 14px; }
+.recommend-bar { margin-top: 14px; padding: 10px; background: #ecf5ff; border-radius: 8px; font-weight: 600; color: #409eff; }
+.settlement-chain { margin: 12px 0; }
+.settlement-chain .chain-row { display: flex; justify-content: space-between; padding: 5px 0; border-bottom: 1px dashed #eee; font-size: 14px; }
+.settlement-chain .chain-row.total { font-weight: 700; border-bottom: none; border-top: 2px solid #333; }
+.result-card { margin-top: 16px; padding: 16px; border-radius: 10px; text-align: center; font-size: 20px; font-weight: 700; }
+.result-card.refund-card { background: #f0fdf0; color: #67c23a; border: 1px solid #67c23a; }
+.result-card.owed-card { background: #fef0f0; color: #f56c6c; border: 1px solid #f56c6c; }
+.result-card.neutral-card { background: #f5f7fa; color: #909399; border: 1px solid #e0e0e0; }
+.unit-cost-info { margin-top: 12px; padding: 10px; background: #fdf6ec; border-radius: 6px; font-size: 13px; }
 </style>
 </head>
 <body>
@@ -66,10 +88,29 @@ input[type="number"] { width: 120px; padding: 4px 8px; border: 1px solid #ccc; b
       </template>
       <label>年终奖金额 <input type="number" v-model.number="params.bonus" min="0" step="1000"></label>
 
-      <!-- Special Deductions Placeholder (T4) -->
+      <!-- Special Deductions Panel (T4) -->
       <div style="margin-top:16px;border-top:1px solid #eee;padding-top:12px;">
         <h4>专项附加扣除</h4>
-        <p style="color:#909399;font-size:13px;">（T4 实现）</p>
+        <div v-for="def in deductionDefs" :key="def.key" class="deduction-card" :class="{active: isDeductionEnabled(def.key)}">
+          <div class="row">
+            <label><input type="checkbox" :checked="isDeductionEnabled(def.key)" @change="toggleDeduction(def.key)"> {{ def.label }}</label>
+            <span class="amount-hint" v-if="isDeductionEnabled(def.key)">¥{{ fmt(getDeductionAmount(def.key)) }}/月</span>
+          </div>
+          <div class="fields" v-if="isDeductionEnabled(def.key)">
+            <template v-if="def.needsCount">
+              <span>数量/份数 <input type="number" :value="getDeductionField(def.key,'count',1)" min="1" max="20" @input="setDeductionField(def.key,'count',$event.target.valueAsNumber||1)"></span>
+            </template>
+            <template v-if="def.key==='medical'">
+              <span>年度自付金额 <input type="number" :value="getDeductionField(def.key,'annualExpense',0)" min="0" step="100" @input="setDeductionField(def.key,'annualExpense',$event.target.valueAsNumber||0)"></span>
+            </template>
+            <template v-if="def.key==='elderly'">
+              <span><input type="checkbox" :checked="getDeductionField(def.key,'onlyChild',false)" @input="setDeductionField(def.key,'onlyChild',$event.target.checked)"> 独生子女</span>
+            </template>
+            <span>起始月 <input type="number" :value="getDeductionField(def.key,'startMonth',1)" min="1" max="12" @input="setDeductionField(def.key,'startMonth',clampMonth($event.target.valueAsNumber))"></span>
+            <span>结束月 <input type="number" :value="getDeductionField(def.key,'endMonth',12)" min="1" max="12" @input="setDeductionField(def.key,'endMonth',clampMonth($event.target.valueAsNumber))"></span>
+          </div>
+          <div v-if="def.mutualGroup && isDeductionEnabled(def.key)" style="font-size:11px;color:#e6a23c;margin-top:4px;">⚠ 与{{ def.mutualLabel }}互斥</div>
+        </div>
       </div>
     </div>
 
@@ -93,9 +134,31 @@ input[type="number"] { width: 120px; padding: 4px 8px; border: 1px solid #ccc; b
             <tr v-if="params.useExtra"><td>补充公积金</td><td>{{ params.extraPct }}%</td><td>{{ fmt(monthDetail.extra_p) }}</td></tr>
             <tr><td><b>合计</b></td><td></td><td><b>{{ fmt(monthDetail.social_p_total) }}</b></td></tr>
           </table>
+
+          <!-- Employer contributions (collapsible) -->
+          <div style="margin:12px 0 6px;">
+            <span class="collapse-toggle" @click="showEmployer=!showEmployer">{{ showEmployer?'▼':'▶' }} 单位五险一金（仅供参考）</span>
+          </div>
+          <table v-if="showEmployer">
+            <tr><th>项目</th><th>比例</th><th>金额</th></tr>
+            <tr><td>养老保险</td><td>{{ (session.pension_org*100).toFixed(1) }}%</td><td>{{ fmt(monthDetail.pension_o) }}</td></tr>
+            <tr><td>医疗保险</td><td>{{ (session.medical_org*100).toFixed(1) }}%</td><td>{{ fmt(monthDetail.medical_o) }}</td></tr>
+            <tr><td>失业保险</td><td>{{ (session.unemploy_org*100).toFixed(1) }}%</td><td>{{ fmt(monthDetail.unemploy_o) }}</td></tr>
+            <tr><td>工伤保险</td><td>{{ (session.injury_org*100).toFixed(2) }}%</td><td>{{ fmt(monthDetail.injury_o) }}</td></tr>
+            <tr><td>住房公积金</td><td>{{ params.housingPct }}%</td><td>{{ fmt(monthDetail.housing_o) }}</td></tr>
+            <tr v-if="params.useExtra"><td>补充公积金</td><td>{{ params.extraPct }}%</td><td>{{ fmt(monthDetail.extra_o) }}</td></tr>
+            <tr><td><b>合计</b></td><td></td><td><b>{{ fmt(monthDetail.social_o_total) }}</b></td></tr>
+          </table>
+
           <h5 style="margin:12px 0 6px;">个人所得税</h5>
           <p>累计应纳税所得额: {{ fmt(monthDetail.cum_taxable) }} | 税率: {{ (monthDetail.rate*100).toFixed(0) }}% | 本月税: {{ fmt(monthDetail.month_tax) }}</p>
+          <p v-if="monthDetail.special_monthly > 0" style="font-size:13px;color:#606266;">专项附加扣除: ¥{{ fmt(monthDetail.special_monthly) }}/月</p>
           <div class="highlight" style="margin-top:12px;">实发到手: ¥{{ fmt(monthDetail.net) }}</div>
+
+          <!-- Unit total employment cost -->
+          <div class="unit-cost-info">
+            单位综合用工成本: ¥{{ fmt(monthDetail.salary + monthDetail.social_o_total) }}
+          </div>
         </div>
       </div>
 
@@ -118,14 +181,55 @@ input[type="number"] { width: 120px; padding: 4px 8px; border: 1px solid #ccc; b
       <!-- Tab: 年终奖对比 -->
       <div v-show="activeTab==='年终奖对比'">
         <p v-if="params.bonus<=0" style="color:#909399;">请在左侧输入年终奖金额</p>
-        <div v-else>
-          <p>（T5 完善展示）</p>
+        <div v-else-if="bonusResult">
+          <p style="margin-bottom:12px;font-size:13px;color:#606266;">年终奖 ¥{{ fmt(params.bonus) }} 计税方式对比</p>
+          <div class="compare-cards">
+            <div class="compare-card" :class="{recommended: bonusResult.totalA <= bonusResult.totalB}">
+              <h5>方式A·单独计税</h5>
+              <div class="line"><span>工资全年个税:</span><span>¥{{ fmt(bonusResult.salaryTaxA) }}</span></div>
+              <div class="line"><span>年终奖个税:</span><span>¥{{ fmt(bonusResult.bonusTaxA) }}</span></div>
+              <div class="line" style="font-weight:700;border-top:1px solid #ddd;padding-top:6px;"><span>合计:</span><span>¥{{ fmt(bonusResult.totalA) }}</span></div>
+            </div>
+            <div class="compare-card" :class="{recommended: bonusResult.totalB < bonusResult.totalA}">
+              <h5>方式B·并入综合所得</h5>
+              <div class="line"><span>全年综合所得:</span><span>¥{{ fmt(params.salary*12 + params.bonus) }}</span></div>
+              <div class="line"><span>应纳税所得额:</span><span>¥{{ fmt(Math.max(0,bonusResult.taxableB)) }}</span></div>
+              <div class="line" style="font-weight:700;border-top:1px solid #ddd;padding-top:6px;"><span>全年个税合计:</span><span>¥{{ fmt(bonusResult.totalB) }}</span></div>
+            </div>
+          </div>
+          <div class="recommend-bar">
+            ★ 推荐: {{ bonusResult.totalA <= bonusResult.totalB ? '方式A（单独计税）' : '方式B（并入综合所得）' }}，节省 ≈ {{ fmt(Math.abs(bonusResult.totalA - bonusResult.totalB)) }} 元
+          </div>
+          <p v-if="params.salary < 5000" style="margin-top:8px;font-size:12px;color:#e6a23c;">（月薪不足5000，已按规则差额补足计算）</p>
         </div>
       </div>
 
       <!-- Tab: 汇算清缴 -->
       <div v-show="activeTab==='汇算清缴'">
-        <p style="color:#909399;">（T5 完善展示）</p>
+        <div v-if="settlementResult && months12">
+          <h5 style="margin-bottom:8px;">年度汇算清缴估算</h5>
+          <div class="settlement-chain">
+            <div class="chain-row"><span>全年综合所得收入额</span><span>¥{{ fmt(settlementData.annualGross) }}</span></div>
+            <div class="chain-row"><span>减除费用（6万/年）</span><span>-¥{{ fmt(60000) }}</span></div>
+            <div class="chain-row"><span>全年专项扣除（五险一金个人）</span><span>-¥{{ fmt(settlementData.annualContrib) }}</span></div>
+            <div class="chain-row"><span>全年专项附加扣除</span><span>-¥{{ fmt(settlementData.annualSpecial) }}</span></div>
+            <div class="chain-row" v-if="annualMedicalDeduction > 0"><span>大病医疗自付年度</span><span>-¥{{ fmt(annualMedicalDeduction) }}</span></div>
+            <div class="chain-row total"><span>年度应纳税所得额</span><span>¥{{ fmt(settlementResult.annualTaxable) }}</span></div>
+            <div class="chain-row"><span>年度应纳个税</span><span>¥{{ fmt(settlementResult.annualSettlementTax) }}</span></div>
+            <div class="chain-row"><span>已预扣个税</span><span>¥{{ fmt(settlementResult.withheldTax) }}</span></div>
+          </div>
+          <!-- Result card -->
+          <div v-if="settlementResult.estimatedRefund > 0.5" class="result-card refund-card">
+            预估退税 ¥{{ fmt(settlementResult.estimatedRefund) }}
+          </div>
+          <div v-else-if="settlementResult.estimatedRefund < -0.5" class="result-card owed-card">
+            预估需补税 ¥{{ fmt(Math.abs(settlementResult.estimatedRefund)) }}
+          </div>
+          <div v-else class="result-card neutral-card">
+            基本持平
+          </div>
+        </div>
+        <p v-else style="color:#909399;">请先设置参数</p>
       </div>
     </div>
   </div>
@@ -715,6 +819,18 @@ const app = createApp({
     const activeTab = ref('月度明细');
     const tabs = ['月度明细', '全年逐月', '年终奖对比', '汇算清缴'];
     const importStatus = ref('');
+    const showEmployer = ref(false);
+
+    // Deduction definitions from CFG.special_deductions
+    const deductionDefs = [
+      { key: 'child_edu', label: '子女教育', needsCount: true },
+      { key: 'continuing_edu', label: '继续教育' },
+      { key: 'medical', label: '大病医疗', needsMedical: true },
+      { key: 'mortgage_int', label: '住房贷款利息', mutualGroup: 'housing', mutualLabel: '住房租金' },
+      { key: 'rent', label: '住房租金', mutualGroup: 'housing', mutualLabel: '住房贷款利息' },
+      { key: 'elderly', label: '赡养老人', needsOnlyChild: true },
+      { key: 'baby_care', label: '婴幼儿照护', needsCount: true },
+    ];
 
     // Reactive CFG proxy for template access
     const cfg = reactive(CFG);
@@ -736,9 +852,119 @@ const app = createApp({
       }
     });
 
-    // Computed: active special items (filter enabled ones)
+    // --- Deduction management methods ---
+    function isDeductionEnabled(key) {
+      return params.specialItems.some(item => item.key === key && item.enabled);
+    }
+    function getDeductionItem(key) {
+      return params.specialItems.find(item => item.key === key) || null;
+    }
+    function getDeductionField(key, field, defaultVal) {
+      const item = getDeductionItem(key);
+      return item && item[field] !== undefined ? item[field] : defaultVal;
+    }
+    function setDeductionField(key, field, value) {
+      let item = getDeductionItem(key);
+      if (!item) {
+        item = { key, label: '', amount: 0, startMonth: 1, endMonth: 12, enabled: true, count: 1, annualExpense: 0, onlyChild: false };
+        params.specialItems.push(item);
+      }
+      item[field] = value;
+      // Recalculate amount when fields change
+      recalcDeductionAmount(key);
+    }
+    function clampMonth(v) {
+      if (!v || v < 1) return 1;
+      if (v > 12) return 12;
+      return Math.floor(v);
+    }
+    function getDeductionAmount(key) {
+      const item = getDeductionItem(key);
+      return item ? item.amount : 0;
+    }
+    function recalcDeductionAmount(key) {
+      const item = getDeductionItem(key);
+      if (!item) return;
+      const sd = CFG.special_deductions;
+      switch (key) {
+        case 'child_edu':
+          item.amount = sd.child_edu * (item.count || 1);
+          break;
+        case 'continuing_edu':
+          item.amount = sd.continuing_edu;
+          break;
+        case 'medical': {
+          const annual = item.annualExpense || 0;
+          const ded = Math.min(Math.max(annual - sd.medical_threshold, 0), sd.medical_annual_cap);
+          item.amount = Math.round(ded / 12 * 100) / 100;
+          break;
+        }
+        case 'mortgage_int':
+          item.amount = sd.mortgage_int;
+          break;
+        case 'rent': {
+          const city = CFG.cities[params.city];
+          item.amount = city ? Number(city.rent_deduction) : sd.rent_tier1;
+          break;
+        }
+        case 'elderly':
+          item.amount = item.onlyChild ? sd.elderly_only : sd.elderly_share;
+          break;
+        case 'baby_care':
+          item.amount = sd.baby_care * (item.count || 1);
+          break;
+        default:
+          break;
+      }
+    }
+    function toggleDeduction(key) {
+      const existing = getDeductionItem(key);
+      if (existing && existing.enabled) {
+        // Disable
+        existing.enabled = false;
+      } else if (existing) {
+        // Re-enable with mutual exclusion
+        if (key === 'mortgage_int') {
+          const rentItem = getDeductionItem('rent');
+          if (rentItem && rentItem.enabled) rentItem.enabled = false;
+        } else if (key === 'rent') {
+          const mortgageItem = getDeductionItem('mortgage_int');
+          if (mortgageItem && mortgageItem.enabled) mortgageItem.enabled = false;
+        }
+        existing.enabled = true;
+        recalcDeductionAmount(key);
+      } else {
+        // Create new enabled item
+        const def = deductionDefs.find(d => d.key === key);
+        // Mutual exclusion: mortgage_int vs rent
+        if (key === 'mortgage_int') {
+          const rentItem = getDeductionItem('rent');
+          if (rentItem && rentItem.enabled) rentItem.enabled = false;
+        } else if (key === 'rent') {
+          const mortgageItem = getDeductionItem('mortgage_int');
+          if (mortgageItem && mortgageItem.enabled) mortgageItem.enabled = false;
+        }
+        const newItem = {
+          key,
+          label: def ? def.label : key,
+          amount: 0,
+          startMonth: 1,
+          endMonth: 12,
+          enabled: true,
+          count: 1,
+          annualExpense: 0,
+          onlyChild: false,
+        };
+        params.specialItems.push(newItem);
+        recalcDeductionAmount(key);
+      }
+    }
+
+    // Computed: active special items (filter enabled, map to engine format)
     const activeSpecialItems = computed(() => {
-      return params.specialItems.filter(item => item.enabled !== false);
+      return params.specialItems
+        .filter(item => item.enabled)
+        .map(item => ({ key: item.key, amount: item.amount, startMonth: item.startMonth, endMonth: item.endMonth }));
     });
 
     // Computed: months12
@@ -754,6 +980,40 @@ const app = createApp({
       return months12.value[params.month - 1];
     });
 
+    // Computed: bonus comparison
+    const bonusResult = computed(() => {
+      if (!monthDetail.value || params.bonus <= 0) return null;
+      return compareBonus(params.salary, monthDetail.value.social_p_total,
+        monthDetail.value.special_monthly, params.bonus, CFG);
+    });
+
+    // Computed: annual medical deduction amount
+    const annualMedicalDeduction = computed(() => {
+      let total = 0;
+      for (const item of params.specialItems) {
+        if (item.key === 'medical' && item.enabled) {
+          const monthsActive = (item.endMonth - item.startMonth + 1);
+          total += (item.amount || 0) * monthsActive;
+        }
+      }
+      return total;
+    });
+
+    // Computed: settlement result
+    const settlementResult = computed(() => {
+      if (!months12.value || months12.value.length < 12) return null;
+      return estimateAnnualSettlement(months12.value, CFG, annualMedicalDeduction.value);
+    });
+
+    // Computed: settlement display data
+    const settlementData = computed(() => {
+      if (!months12.value) return null;
+      const annualGross = months12.value.reduce((s, m) => s + m.salary, 0);
+      const annualContrib = months12.value.reduce((s, m) => s + m.social_p_total, 0);
+      const annualSpecial = months12.value.reduce((s, m) => s + m.special_monthly, 0);
+      return { annualGross, annualContrib, annualSpecial };
+    });
+
     // Methods
     function onCityChange() {
       const city = CFG.cities[params.city];
@@ -764,6 +1024,9 @@ const app = createApp({
         if (!years.includes(params.year)) {
           params.year = years[years.length - 1];
         }
+        // Recalculate rent deduction amount if active
+        const rentItem = getDeductionItem('rent');
+        if (rentItem && rentItem.enabled) recalcDeductionAmount('rent');
       }
     }
 
@@ -809,8 +1072,12 @@ const app = createApp({
     }
 
     return {
-      cfg, params, activeTab, tabs, importStatus,
+      cfg, params, activeTab, tabs, importStatus, showEmployer,
+      deductionDefs, isDeductionEnabled, toggleDeduction, getDeductionAmount,
+      getDeductionField, setDeductionField, clampMonth,
       availableYears, session, months12, monthDetail,
+      activeSpecialItems, bonusResult, annualMedicalDeduction,
+      settlementResult, settlementData,
       onCityChange, importConfig, exportCSV, exportExcel,
       fmt,
     };
