@@ -191,6 +191,7 @@ http(s); opening `index.html` via `file://` still works as a full offline single
 - [`docs/upgrade-changelog.md`](docs/upgrade-changelog.md) — v1→v2→v3 升级变更说明 / changelog
 - [`docs/salary-calculator-calibration-report.md`](docs/salary-calculator-calibration-report.md) — 与 GitHub 开源项目口径比对 / calibration report
 - [`docs/src-vs-github-repos-comparison.md`](docs/src-vs-github-repos-comparison.md) — 详细代码对比，含对 `income-calc` 的功能/易用性/准确性对等与超越总评 / detailed comparison incl. parity & superiority vs `income-calc`
+- [`docs/gitee-repos-comparison.md`](docs/gitee-repos-comparison.md) — Gitee（码云）同类开源项目调研与生态对比 / Gitee-side landscape survey & positioning
 
 ---
 
