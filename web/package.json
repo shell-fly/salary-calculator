@@ -2,7 +2,9 @@
   "type": "module",
   "scripts": {
     "test": "node test-compute.js",
+    "test:xlsx": "python ../src/test_xlsx_writer.py",
     "inline:vue": "node inline-vue.mjs",
-    "inline:config": "node inline-config.mjs"
+    "inline:config": "node inline-config.mjs",
+    "inline:xlsx": "node inline-xlsx.mjs"
   }
 }

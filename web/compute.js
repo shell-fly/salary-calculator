@@ -294,19 +294,34 @@ export function computeMonth(sess, monthNo, salary, socialBaseDict, housingBase,
 }
 
 /**
- * Run 12 months using each month's own half-year bounds. Returns array of 12 dicts.
+ * Resolve one declared contribution base for a month.
+ * declared is [h1, h2]; a null/0/empty entry means "follow the salary".
  */
-export function computeYear(sess, salary, specialItems, housingPct, extraPct, CFG) {
+export function declaredBase(declared, salary, month) {
+  if (!declared) return salary;
+  const value = Number(declared[month <= 6 ? 0 : 1]);
+  return value > 0 ? value : salary;
+}
+
+/**
+ * Run 12 months using each month's own half-year bounds. Returns array of 12 dicts.
+ * declared (optional): {social: [h1, h2], housing: [h1, h2]} contribution bases as
+ * declared by the employer. Many companies declare the statutory lower bound instead of
+ * the real salary, so the base must be overridable; it is still clamped to the policy range.
+ */
+export function computeYear(sess, salary, specialItems, housingPct, extraPct, CFG, declared) {
   const results = [];
   for (let m = 1; m <= 12; m++) {
     const [plo, phi, mlo, mhi, ulo, uhi] = sess.socialBounds(m);
     const [hlo, hhi] = sess.housingBounds(m);
+    const sBase = declaredBase((declared || {}).social, salary, m);
+    const hBase = declaredBase((declared || {}).housing, salary, m);
     const sb = {
-      pension: clamp(salary, plo, phi),
-      medical: clamp(salary, mlo, mhi),
-      unemployment: clamp(salary, ulo, uhi),
+      pension: clamp(sBase, plo, phi),
+      medical: clamp(sBase, mlo, mhi),
+      unemployment: clamp(sBase, ulo, uhi),
     };
-    const hb = clamp(salary, hlo, hhi);
+    const hb = clamp(hBase, hlo, hhi);
     results.push(computeMonth(sess, m, salary, sb, hb, specialItems, housingPct, extraPct, CFG));
   }
   return results;
@@ -371,14 +386,14 @@ export function estimateAnnualSettlement(months12, CFG, annualMedical = 0.0) {
  * Returns {gross, net_12m, tax_12m, contrib_12m, months}.
  */
 export function inverseGrossFromNet(sess, targetNet, specialItems, housingPct, extraPct,
-  CFG, tol = 0.01, maxIter = 120) {
+  CFG, declared = null, tol = 0.01, maxIter = 120) {
   let lo = 0.0, hi = 10_000_000.0;
   const targetTotal = targetNet * 12.0;
   let last = null;
 
   for (let i = 0; i < maxIter; i++) {
     const mid = (lo + hi) / 2.0;
-    const months = computeYear(sess, mid, specialItems, housingPct, extraPct, CFG);
+    const months = computeYear(sess, mid, specialItems, housingPct, extraPct, CFG, declared);
     const netTotal = months.reduce((s, m) => s + m.net, 0);
     last = { mid, months, netTotal };
 

@@ -12,7 +12,7 @@ echo " 工资计算器（中国） — Pages 部署检查"
 echo "==============================================="
 
 # 1) 校验 PWA 必需文件
-echo "[1/4] 校验 Web UI / PWA 文件..."
+echo "[1/5] 校验 Web UI / PWA 文件..."
 for f in web/index.html web/manifest.webmanifest web/sw.js \
          web/icons/icon-192.png web/icons/icon-512.png web/icons/maskable-512.png \
          web/icons/apple-touch-icon.png; do
@@ -20,8 +20,29 @@ for f in web/index.html web/manifest.webmanifest web/sw.js \
 done
 [ "$OK" = 1 ] || { echo "文件不完整,请先运行: powershell -File web/gen-icons.ps1"; exit 1; }
 
+# 1b) 校验内嵌副本、引擎断言与 Excel 引擎（index.html 内联了 config、引擎与两个 xlsx 模块）
+echo "[2/5] 校验内嵌副本、引擎断言与 Excel 测试..."
+if command -v node >/dev/null 2>&1; then
+  node web/inline-config.mjs >/dev/null || { echo "  ✗ config.json 与 index.html 内嵌副本不一致"; exit 1; }
+  node web/inline-compute.mjs >/dev/null || { echo "  ✗ compute.js 与 index.html 内嵌引擎不一致"; exit 1; }
+  node web/inline-xlsx.mjs  >/dev/null || { echo "  ✗ xlsx 引擎与 index.html 内嵌副本不一致"; exit 1; }
+  echo "  ✓ 内嵌副本已与源文件同步"
+  node web/test-compute.js >/dev/null || { echo "  ✗ 计算引擎断言未通过（345 条，含内联防漂移检查）"; exit 1; }
+  echo "  ✓ 计算引擎 345 条断言通过"
+else
+  echo "  ! 未检测到 node,跳过内联一致性校验。改过 config.json 或 web/*.js 后必须手动重跑内联脚本。"
+fi
+if command -v python3 >/dev/null 2>&1; then
+  python3 src/test_xlsx_writer.py >/dev/null || { echo "  ✗ xlsx 契约测试未通过"; exit 1; }
+  echo "  ✓ xlsx 契约测试通过（CLI 与网页 Excel 逐字节一致）"
+  python3 src/test_cli_smoke.py >/dev/null || { echo "  ✗ CLI 端到端冒烟测试未通过"; exit 1; }
+  echo "  ✓ CLI 端到端冒烟测试通过（17 条，覆盖申报基数与反推路径）"
+else
+  echo "  ! 未检测到 python3,跳过 xlsx 契约测试与 CLI 冒烟测试"
+fi
+
 # 2) 校验 git 仓库与远程
-echo "[2/4] 检查 git 远程..."
+echo "[3/5] 检查 git 远程..."
 if ! git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
   echo "  ✗ 当前目录不是 git 仓库"; exit 1
 fi
@@ -35,7 +56,7 @@ else
 fi
 
 # 3) 提交并推送
-echo "[3/4] 提交本地改动并推送..."
+echo "[4/5] 提交本地改动并推送..."
 git add -A
 if ! git diff --cached --quiet; then
   git commit -m "chore(deploy): update Web UI / PWA assets" || true
@@ -51,7 +72,7 @@ case "$TARGET" in
 esac
 
 # 4) 打印启用步骤
-echo "[4/4] 推送完成。到网页控制台启用 Pages(首次一次性操作):"
+echo "[5/5] 推送完成。到网页控制台启用 Pages(首次一次性操作):"
 cat <<'EOF'
 
   ── GitHub Pages ──────────────────────────────

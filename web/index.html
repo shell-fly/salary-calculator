@@ -124,6 +124,35 @@ input[type="number"] { width: 120px; padding: 4px 8px; border: 1px solid #ccc; b
       </template>
       <label>年终奖金额 <input type="number" v-model.number="params.bonus" min="0" step="1000"></label>
 
+      <!-- Declared Contribution Bases -->
+      <div style="margin-top:16px;border-top:1px solid #eee;padding-top:12px;">
+        <label style="display:flex;align-items:center;gap:6px;">
+          <input type="checkbox" v-model="params.useDeclared" style="width:auto;"> 自定义申报基数
+        </label>
+        <p v-if="!params.useDeclared" style="font-size:11px;color:#909399;margin:4px 0 0;">
+          默认按税前月薪 {{ fmt(params.salary) }} 元作为缴费基数。单位按下限申报时请勾选。
+        </p>
+        <template v-if="params.useDeclared && baseRanges">
+          <label>上半年社保基数
+            <input type="number" v-model.number="params.declaredSocial1" min="0" step="1" :placeholder="params.salary">
+          </label>
+          <label>下半年社保基数
+            <input type="number" v-model.number="params.declaredSocial2" min="0" step="1" :placeholder="params.declaredSocial1 || params.salary">
+          </label>
+          <label>上半年公积金基数
+            <input type="number" v-model.number="params.declaredHousing1" min="0" step="1" :placeholder="params.salary">
+          </label>
+          <label>下半年公积金基数
+            <input type="number" v-model.number="params.declaredHousing2" min="0" step="1" :placeholder="params.declaredHousing1 || params.salary">
+          </label>
+          <p style="font-size:11px;color:#909399;margin:4px 0 0;">
+            留空或 0 = 跟随月薪；填写后仍会被限制在 {{ session.city_name }} {{ session.year }} 年度政策区间内
+            （上半年社保 {{ fmt(baseRanges.socialH1[0]) }}~{{ fmt(baseRanges.socialH1[1]) }}、公积金 {{ fmt(baseRanges.housingH1[0]) }}~{{ fmt(baseRanges.housingH1[1]) }}；
+            下半年社保 {{ fmt(baseRanges.socialH2[0]) }}~{{ fmt(baseRanges.socialH2[1]) }}、公积金 {{ fmt(baseRanges.housingH2[0]) }}~{{ fmt(baseRanges.housingH2[1]) }}）。
+          </p>
+        </template>
+      </div>
+
       <!-- Special Deductions Panel (T4) -->
       <div style="margin-top:16px;border-top:1px solid #eee;padding-top:12px;">
         <h4>专项附加扣除</h4>
@@ -285,19 +314,42 @@ input[type="number"] { width: 120px; padding: 4px 8px; border: 1px solid #ccc; b
 </div>
 
 <!-- Inline Compute Engine (from compute.js, export keywords removed) -->
-<script>
+<script id="compute-engine">
+/**
+ * compute.js — Core computation engine (JS port from salary_calculator.py)
+ * China Salary Calculator: five insurances, housing fund, cumulative IIT,
+ * bonus comparison, annual settlement, inverse calculation.
+ */
+
+// =====================================================================
+// Utility Functions
+// =====================================================================
+
+/**
+ * Clamp value between lo and hi.
+ */
 function clamp(v, lo, hi) {
   return Math.max(lo, Math.min(v, hi));
 }
 
+/**
+ * Round to nearest yuan (half-up). Must use Math.floor(v+0.5) exactly.
+ */
 function roundYuan(v) {
   return Math.floor(v + 0.5);
 }
 
+/**
+ * Format number to 2 decimal places as string.
+ */
 function fmt(v) {
   return Number(v).toFixed(2);
 }
 
+/**
+ * Convert a config bracket row [upper, rate, quick] to JS form.
+ * upper=null means Infinity.
+ */
 function _toBracket(row) {
   return [
     row[0] === null ? Infinity : Number(row[0]),
@@ -306,6 +358,10 @@ function _toBracket(row) {
   ];
 }
 
+/**
+ * Compute tax from taxable income using a bracket table.
+ * table: array of [upper, rate, quick]
+ */
 function taxByTable(taxable, table) {
   if (taxable <= 0) return 0.0;
   for (const [upper, rate, quick] of table) {
@@ -316,10 +372,18 @@ function taxByTable(taxable, table) {
   return 0.0;
 }
 
+/**
+ * Cumulative withholding tax using the annual 7-level tax bracket table.
+ */
 function calcCumulativeTax(cumTaxable, taxBrackets) {
   return taxByTable(cumTaxable, taxBrackets);
 }
 
+/**
+ * Once-off annual bonus taxed separately.
+ * Handles salary < 5000 gap-fill per MOF/SAT rules.
+ * Policy: 财政部 税务总局公告 2023年第30号, extended to 2027-12-31.
+ */
 function bonusSingleTax(bonus, salary, bonusBrackets, taxFreeMonthly) {
   if (bonus <= 0) return 0.0;
   let base;
@@ -335,9 +399,14 @@ function bonusSingleTax(bonus, salary, bonusBrackets, taxFreeMonthly) {
       return base * rate - quick;
     }
   }
+  // Fallthrough: highest bracket (45% - 181920)
   return base * 0.45 - 181920;
 }
 
+/**
+ * Sum of special additional deductions active in a given month.
+ * items: [{key, amount, startMonth, endMonth}]
+ */
 function monthlySpecial(month, items) {
   let total = 0.0;
   for (const item of items) {
@@ -348,6 +417,14 @@ function monthlySpecial(month, items) {
   return total;
 }
 
+// =====================================================================
+// Session Factory: per-city / per-year parameter resolver
+// =====================================================================
+
+/**
+ * Normalize social_base spec: handles both [lo, hi] array and
+ * {pension:[lo,hi], medical:[lo,hi], unemployment:[lo,hi]} dict format.
+ */
 function _normalizeSocial(spec) {
   if (Array.isArray(spec) && spec.length === 2) {
     return { pension: spec, medical: spec, unemployment: spec };
@@ -362,6 +439,10 @@ function _normalizeSocial(spec) {
   throw new Error("Invalid social_base spec");
 }
 
+/**
+ * Create a session object for a given city and year.
+ * Returns an object with all rates, bounds, and helper methods.
+ */
 function createSession(cityCode, year, CFG) {
   const taxBrackets = CFG.tax_brackets.map(_toBracket);
   const bonusBrackets = CFG.bonus_brackets.map(_toBracket);
@@ -375,6 +456,7 @@ function createSession(cityCode, year, CFG) {
   }
   const city = CFG.cities[cityCode];
 
+  // Build years map with numeric keys
   const yearsMap = {};
   for (const [k, v] of Object.entries(city.years)) {
     yearsMap[Number(k)] = v;
@@ -412,6 +494,9 @@ function createSession(cityCode, year, CFG) {
 
     _yearData: y,
 
+    /**
+     * Return ['h1'|'h2', periodData] for the given month (1..12).
+     */
     periodFor(month) {
       const m = Number(month);
       if (m <= y.h1.months[1]) {
@@ -420,6 +505,9 @@ function createSession(cityCode, year, CFG) {
       return ['h2', y.h2];
     },
 
+    /**
+     * Return [pensionLo, pensionHi, medicalLo, medicalHi, unempLo, unempHi].
+     */
     socialBounds(month) {
       const [, p] = this.periodFor(month);
       const s = _normalizeSocial(p.social_base);
@@ -430,11 +518,17 @@ function createSession(cityCode, year, CFG) {
       ];
     },
 
+    /**
+     * Return [housingLo, housingHi] for the given month.
+     */
     housingBounds(month) {
       const [, p] = this.periodFor(month);
       return [Number(p.housing_base[0]), Number(p.housing_base[1])];
     },
 
+    /**
+     * Whether the period data is provisional (not yet officially verified).
+     */
     isProvisional(month) {
       const [, p] = this.periodFor(month);
       return Boolean(p.provisional || false);
@@ -444,6 +538,15 @@ function createSession(cityCode, year, CFG) {
   return sess;
 }
 
+// =====================================================================
+// Core Computation
+// =====================================================================
+
+/**
+ * Compute a single month's detail under cumulative withholding.
+ * socialBaseDict: {pension: clamped_value, medical: clamped_value, unemployment: clamped_value}
+ * specialItems: [{key, amount, startMonth, endMonth}]
+ */
 function computeMonth(sess, monthNo, salary, socialBaseDict, housingBase,
   specialItems, housingPct, extraPct, CFG) {
   const taxFreeMonthly = sess.taxFreeMonthly;
@@ -452,6 +555,7 @@ function computeMonth(sess, monthNo, salary, socialBaseDict, housingBase,
   const sbM = socialBaseDict.medical;
   const sbU = socialBaseDict.unemployment;
 
+  // Five insurances (employee share)
   const pensionP = sbP * sess.pension_emp;
   const medicalP = sbM * sess.medical_emp;
   const unemployP = sbU * sess.unemploy_emp;
@@ -459,6 +563,7 @@ function computeMonth(sess, monthNo, salary, socialBaseDict, housingBase,
   const extraP = extraPct ? roundYuan(housingBase * extraPct / 100.0) : 0.0;
   const socialPTotal = pensionP + medicalP + unemployP + housingP + extraP;
 
+  // Five insurances (employer share)
   const pensionO = sbP * sess.pension_org;
   const medicalO = sbM * sess.medical_org;
   const unemployO = sbU * sess.unemploy_org;
@@ -467,6 +572,7 @@ function computeMonth(sess, monthNo, salary, socialBaseDict, housingBase,
   const extraO = extraPct ? roundYuan(housingBase * extraPct / 100.0) : 0.0;
   const socialOTotal = pensionO + medicalO + unemployO + injuryO + housingO + extraO;
 
+  // Cumulative withholding IIT
   const specialMonthly = monthlySpecial(monthNo, specialItems);
   const cumIncome = salary * monthNo;
   const cumBase = taxFreeMonthly * monthNo;
@@ -504,22 +610,48 @@ function computeMonth(sess, monthNo, salary, socialBaseDict, housingBase,
   };
 }
 
-function computeYear(sess, salary, specialItems, housingPct, extraPct, CFG) {
+/**
+ * Resolve one declared contribution base for a month.
+ * declared is [h1, h2]; a null/0/empty entry means "follow the salary".
+ */
+function declaredBase(declared, salary, month) {
+  if (!declared) return salary;
+  const value = Number(declared[month <= 6 ? 0 : 1]);
+  return value > 0 ? value : salary;
+}
+
+/**
+ * Run 12 months using each month's own half-year bounds. Returns array of 12 dicts.
+ * declared (optional): {social: [h1, h2], housing: [h1, h2]} contribution bases as
+ * declared by the employer. Many companies declare the statutory lower bound instead of
+ * the real salary, so the base must be overridable; it is still clamped to the policy range.
+ */
+function computeYear(sess, salary, specialItems, housingPct, extraPct, CFG, declared) {
   const results = [];
   for (let m = 1; m <= 12; m++) {
     const [plo, phi, mlo, mhi, ulo, uhi] = sess.socialBounds(m);
     const [hlo, hhi] = sess.housingBounds(m);
+    const sBase = declaredBase((declared || {}).social, salary, m);
+    const hBase = declaredBase((declared || {}).housing, salary, m);
     const sb = {
-      pension: clamp(salary, plo, phi),
-      medical: clamp(salary, mlo, mhi),
-      unemployment: clamp(salary, ulo, uhi),
+      pension: clamp(sBase, plo, phi),
+      medical: clamp(sBase, mlo, mhi),
+      unemployment: clamp(sBase, ulo, uhi),
     };
-    const hb = clamp(salary, hlo, hhi);
+    const hb = clamp(hBase, hlo, hhi);
     results.push(computeMonth(sess, m, salary, sb, hb, specialItems, housingPct, extraPct, CFG));
   }
   return results;
 }
 
+// =====================================================================
+// Bonus Comparison / Annual Settlement / Inverse Calculation
+// =====================================================================
+
+/**
+ * Compare bonus taxation methods: A (separate) vs B (combined).
+ * Returns {totalA, totalB, salaryTaxA, bonusTaxA, taxableB}.
+ */
 function compareBonus(salary, socialPMonthly, specialMonthly, bonus, CFG) {
   const taxFreeMonthly = Number(CFG.tax_free_monthly);
   const taxBrackets = CFG.tax_brackets.map(_toBracket);
@@ -542,6 +674,12 @@ function compareBonus(salary, socialPMonthly, specialMonthly, bonus, CFG) {
   return { totalA, totalB, salaryTaxA, bonusTaxA, taxableB };
 }
 
+/**
+ * Annual settlement (汇算清缴) refund/tax-due estimation.
+ * months12: array of 12 computeMonth result dicts.
+ * Returns {annualTaxable, annualSettlementTax, withheldTax, estimatedRefund}.
+ * estimatedRefund > 0 means refund; < 0 means additional tax due.
+ */
 function estimateAnnualSettlement(months12, CFG, annualMedical = 0.0) {
   const taxFreeMonthly = Number(CFG.tax_free_monthly);
   const taxBrackets = CFG.tax_brackets.map(_toBracket);
@@ -559,15 +697,20 @@ function estimateAnnualSettlement(months12, CFG, annualMedical = 0.0) {
   return { annualTaxable, annualSettlementTax, withheldTax, estimatedRefund };
 }
 
+/**
+ * Binary-search gross monthly salary such that 12-month net total
+ * matches targetNet * 12 within tol.
+ * Returns {gross, net_12m, tax_12m, contrib_12m, months}.
+ */
 function inverseGrossFromNet(sess, targetNet, specialItems, housingPct, extraPct,
-  CFG, tol = 0.01, maxIter = 120) {
+  CFG, declared = null, tol = 0.01, maxIter = 120) {
   let lo = 0.0, hi = 10_000_000.0;
   const targetTotal = targetNet * 12.0;
   let last = null;
 
   for (let i = 0; i < maxIter; i++) {
     const mid = (lo + hi) / 2.0;
-    const months = computeYear(sess, mid, specialItems, housingPct, extraPct, CFG);
+    const months = computeYear(sess, mid, specialItems, housingPct, extraPct, CFG, declared);
     const netTotal = months.reduce((s, m) => s + m.net, 0);
     last = { mid, months, netTotal };
 
@@ -947,6 +1090,457 @@ function inverseGrossFromNet(sess, targetNet, specialItems, housingPct, extraPct
 }
 </script>
 
+<script id="xlsx-writer">
+/**
+ * xlsx-writer.js — zero-dependency .xlsx (SpreadsheetML) writer for the Web UI.
+ *
+ * Part of 工资计算器（中国）/ china-salary-calculator.
+ *
+ * This is a line-for-line port of `src/xlsx_writer.py`: the CLI and the single-file Web UI
+ * must hand out the same styled workbook, and they must do it without any third-party
+ * library. The old Web export pulled SheetJS from a CDN, so offline users were told to use
+ * CSV instead; and the CLI Excel export silently disappeared unless `openpyxl` was installed.
+ *
+ * `src/test_xlsx_writer.py` asserts that both writers produce byte-identical output, which is
+ * only possible because the zip is STORE-only, the timestamps are fixed, and every number is
+ * serialised through money()/percent() instead of the language's default float formatting.
+ *
+ * Style indices (identical to the Python module):
+ *   0 default  1 header  2 title  3 money #,##0.00  4 percent 0.0%  5 label  6 highlight
+ */
+
+const XML_NS = 'http://schemas.openxmlformats.org/spreadsheetml/2006/main';
+
+// Fixed DOS date/time (2020-01-01 00:00:00), shared with the Python writer.
+const DOS_TIME = 0;
+const DOS_DATE = ((2020 - 1980) << 9) | (1 << 5) | 1;
+
+/** Format a number for a money cell: the #,##0.00 style adds the thousands separators. */
+const money = (value) => value.toFixed(2);
+/** Format a ratio for a percent cell (0.0408 -> 4.1% under the 0.0% style). */
+const percent = (value) => value.toFixed(4);
+/** Format a count for a numeric cell. */
+const num = (value) => value.toFixed(2);
+
+/** A cell is numeric only when it is a bare decimal literal (never with separators). */
+function isNumeric(text) {
+  const body = text.startsWith('-') ? text.slice(1) : text;
+  return body.length > 0 && /^[0-9.]+$/.test(body);
+}
+
+/** 1-based column index -> spreadsheet letter (1 -> A, 27 -> AA). */
+function colLetter(idx) {
+  let out = '';
+  while (idx > 0) {
+    const rem = (idx - 1) % 26;
+    idx = Math.floor((idx - 1) / 26);
+    out = String.fromCharCode(65 + rem) + out;
+  }
+  return out;
+}
+
+function esc(text) {
+  return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
+/** Freeze-pane XML for a top-left cell such as A2 / A3. */
+function paneXml(freeze) {
+  if (!freeze) return '';
+  const col = freeze.replace(/[0-9]/g, '');
+  const row = col.length ? freeze.slice(col.length) : freeze;
+  let xsplit = 0;
+  for (const ch of col) xsplit = xsplit * 26 + (ch.charCodeAt(0) - 64);
+  const ysplit = parseInt(row, 10) - 1;
+  const attrs = [];
+  if (xsplit) attrs.push(`xSplit="${xsplit}"`);
+  if (ysplit) attrs.push(`ySplit="${ysplit}"`);
+  const state = ysplit === 0 ? 'topRight' : (xsplit === 0 ? 'bottomLeft' : 'bottomRight');
+  return `<sheetViews><sheetView workbookViewId="0"><pane ${attrs.join(' ')} ` +
+    `topLeftCell="${freeze}" activePane="${state}" state="frozen"/>` +
+    '</sheetView></sheetViews>';
+}
+
+function sheetXml(sheet) {
+  const { rows, widths: cols } = sheet;
+  const lastCol = rows.reduce((max, r) => Math.max(max, r.length), 1);
+  const parts = ['<?xml version="1.0" encoding="UTF-8" standalone="yes"?>',
+    `<worksheet xmlns="${XML_NS}">`];
+  parts.push(`<dimension ref="A1:${colLetter(lastCol)}${rows.length}"/>`);
+  parts.push(paneXml(sheet.freeze));
+  parts.push('<sheetFormatPr defaultRowHeight="15"/>');
+  if (cols.length) {
+    parts.push('<cols>' + cols.map((w, i) =>
+      `<col min="${i + 1}" max="${i + 1}" width="${w}" customWidth="1"/>`).join('') + '</cols>');
+  }
+  const body = rows.map((row, index) => {
+    const rIdx = index + 1;
+    const cells = row.map((cell, cIndex) => {
+      const [text, style] = cell;
+      const ref = `${colLetter(cIndex + 1)}${rIdx}`;
+      if (text === '') return `<c r="${ref}" s="${style}"/>`;
+      if (isNumeric(text)) return `<c r="${ref}" s="${style}"><v>${text}</v></c>`;
+      return `<c r="${ref}" s="${style}" t="inlineStr"><is><t>${esc(text)}</t></is></c>`;
+    }).join('');
+    let height = '';
+    if (rIdx === 1 && sheet.titleRow) height = ' ht="30" customHeight="1"';
+    else if (sheet.headerRow && rIdx === sheet.headerRow) height = ' ht="24" customHeight="1"';
+    return `<row r="${rIdx}"${height}>${cells}</row>`;
+  }).join('');
+  parts.push(`<sheetData>${body}</sheetData>`);
+  if (sheet.autofilter && rows.length) {
+    parts.push(`<autoFilter ref="A1:${colLetter(rows[0].length)}${rows.length}"/>`);
+  }
+  if (sheet.merges.length) {
+    parts.push(`<mergeCells count="${sheet.merges.length}">` +
+      sheet.merges.map((m) => `<mergeCell ref="${m}"/>`).join('') + '</mergeCells>');
+  }
+  parts.push('</worksheet>');
+  return parts.filter(Boolean).join('');
+}
+
+const STYLES_XML = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+  `<styleSheet xmlns="${XML_NS}">` +
+  '<numFmts count="2">' +
+  '<numFmt numFmtId="164" formatCode="#,##0.00"/>' +
+  '<numFmt numFmtId="165" formatCode="0.0%"/>' +
+  '</numFmts>' +
+  '<fonts count="4">' +
+  '<font><sz val="11"/><name val="Microsoft YaHei"/><color rgb="FF34423D"/></font>' +
+  '<font><b/><sz val="11"/><name val="Microsoft YaHei"/><color rgb="FF245642"/></font>' +
+  '<font><b/><sz val="15"/><name val="Microsoft YaHei"/><color rgb="FF173F31"/></font>' +
+  '<font><b/><sz val="12"/><name val="Microsoft YaHei"/><color rgb="FF176C4E"/></font>' +
+  '</fonts>' +
+  '<fills count="5">' +
+  '<fill><patternFill patternType="none"/></fill>' +
+  '<fill><patternFill patternType="gray125"/></fill>' +
+  '<fill><patternFill patternType="solid"><fgColor rgb="FFEAF5F0"/><bgColor indexed="64"/></patternFill></fill>' +
+  '<fill><patternFill patternType="solid"><fgColor rgb="FFDDEFE7"/><bgColor indexed="64"/></patternFill></fill>' +
+  '<fill><patternFill patternType="solid"><fgColor rgb="FFF0F8F4"/><bgColor indexed="64"/></patternFill></fill>' +
+  '</fills>' +
+  '<borders count="3">' +
+  '<border><left/><right/><top/><bottom/><diagonal/></border>' +
+  '<border><left/><right/><top/><bottom style="thin"><color rgb="FFE4EAE7"/></bottom><diagonal/></border>' +
+  '<border><left/><right/><top style="thin"><color rgb="FFCFE1D9"/></top>' +
+  '<bottom style="thin"><color rgb="FFCFE1D9"/></bottom><diagonal/></border>' +
+  '</borders>' +
+  '<cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>' +
+  '<cellXfs count="7">' +
+  '<xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/>' +
+  '<xf numFmtId="0" fontId="1" fillId="2" borderId="2" xfId="0" applyFont="1" applyFill="1" applyBorder="1" applyAlignment="1"><alignment horizontal="center" vertical="center"/></xf>' +
+  '<xf numFmtId="0" fontId="2" fillId="3" borderId="0" xfId="0" applyFont="1" applyFill="1" applyAlignment="1"><alignment horizontal="center" vertical="center"/></xf>' +
+  '<xf numFmtId="164" fontId="0" fillId="0" borderId="1" xfId="0" applyNumberFormat="1" applyBorder="1" applyAlignment="1"><alignment horizontal="right"/></xf>' +
+  '<xf numFmtId="165" fontId="0" fillId="0" borderId="1" xfId="0" applyNumberFormat="1" applyBorder="1" applyAlignment="1"><alignment horizontal="right"/></xf>' +
+  '<xf numFmtId="0" fontId="0" fillId="0" borderId="1" xfId="0" applyBorder="1"/>' +
+  '<xf numFmtId="164" fontId="3" fillId="4" borderId="1" xfId="0" applyNumberFormat="1" applyFont="1" applyFill="1" applyBorder="1" applyAlignment="1"><alignment horizontal="right"/></xf>' +
+  '</cellXfs>' +
+  '<cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles>' +
+  '</styleSheet>';
+
+function contentTypesXml(sheetCount) {
+  let overrides = '';
+  for (let i = 1; i <= sheetCount; i += 1) {
+    overrides += `<Override PartName="/xl/worksheets/sheet${i}.xml" ContentType="application/vnd.` +
+      'openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>';
+  }
+  return '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+    '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">' +
+    '<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>' +
+    '<Default Extension="xml" ContentType="application/xml"/>' +
+    '<Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>' +
+    '<Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>' +
+    `${overrides}</Types>`;
+}
+
+const CRC_TABLE = (() => {
+  const table = new Uint32Array(256);
+  for (let n = 0; n < 256; n += 1) {
+    let c = n;
+    for (let k = 0; k < 8; k += 1) c = (c & 1) ? (0xEDB88320 ^ (c >>> 1)) : (c >>> 1);
+    table[n] = c >>> 0;
+  }
+  return table;
+})();
+
+function crc32(bytes) {
+  let crc = 0xFFFFFFFF;
+  for (const byte of bytes) crc = CRC_TABLE[(crc ^ byte) & 0xFF] ^ (crc >>> 8);
+  return (crc ^ 0xFFFFFFFF) >>> 0;
+}
+
+function u16(value) { return [value & 0xFF, (value >>> 8) & 0xFF]; }
+function u32(value) { return [value & 0xFF, (value >>> 8) & 0xFF, (value >>> 16) & 0xFF, (value >>> 24) & 0xFF]; }
+
+/** STORE-only zip built by hand, matching the Python writer byte for byte. */
+function zip(parts) {
+  const body = [];
+  const central = [];
+  let offset = 0;
+  for (const [name, text] of parts) {
+    const nameBytes = new TextEncoder().encode(name);
+    const payload = new TextEncoder().encode(text);
+    const crc = crc32(payload);
+    const local = [
+      ...u32(0x04034B50), ...u16(20), ...u16(0), ...u16(0), ...u16(DOS_TIME), ...u16(DOS_DATE),
+      ...u32(crc), ...u32(payload.length), ...u32(payload.length), ...u16(nameBytes.length), ...u16(0),
+    ];
+    const entry = Uint8Array.from([...local, ...nameBytes, ...payload]);
+    body.push(entry);
+    central.push(Uint8Array.from([
+      ...u32(0x02014B50), ...u16(20), ...u16(20), ...u16(0), ...u16(0), ...u16(DOS_TIME), ...u16(DOS_DATE),
+      ...u32(crc), ...u32(payload.length), ...u32(payload.length), ...u16(nameBytes.length),
+      ...u16(0), ...u16(0), ...u16(0), ...u16(0), ...u32(0x20), ...u32(offset),
+      ...nameBytes,
+    ]));
+    offset += entry.length;
+  }
+  const directory = central.length ? Uint8Array.from([].concat(...central.map((c) => Array.from(c)))) : new Uint8Array();
+  const end = Uint8Array.from([
+    ...u32(0x06054B50), ...u16(0), ...u16(0), ...u16(parts.length), ...u16(parts.length),
+    ...u32(directory.length), ...u32(offset), ...u16(0),
+  ]);
+  const total = body.reduce((sum, part) => sum + part.length, 0) + directory.length + end.length;
+  const out = new Uint8Array(total);
+  let cursor = 0;
+  for (const part of body) { out.set(part, cursor); cursor += part.length; }
+  out.set(directory, cursor); cursor += directory.length;
+  out.set(end, cursor);
+  return out;
+}
+
+class XlsxBook {
+  constructor() {
+    this.sheets = [];
+  }
+
+  addSheet(name, { rows, widths = [], merges = [], freeze = null, autofilter = false,
+    titleRow = false, headerRow = null } = {}) {
+    this.sheets.push({
+      name, rows, widths: [...widths], merges: [...merges], freeze,
+      autofilter: Boolean(autofilter), titleRow: Boolean(titleRow), headerRow,
+    });
+    return this;
+  }
+
+  workbookXml() {
+    const sheets = this.sheets.map((s, i) =>
+      `<sheet name="${esc(s.name)}" sheetId="${i + 1}" r:id="rId${i + 1}"/>`).join('');
+    return '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+      `<workbook xmlns="${XML_NS}" ` +
+      'xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">' +
+      `<sheets>${sheets}</sheets><calcPr calcId="0"/></workbook>`;
+  }
+
+  workbookRelsXml() {
+    let rels = '';
+    for (let i = 1; i <= this.sheets.length; i += 1) {
+      rels += `<Relationship Id="rId${i}" Type="${XML_NS}/worksheet" Target="worksheets/sheet${i}.xml"/>`;
+    }
+    const styles = `<Relationship Id="rId${this.sheets.length + 1}" ` +
+      `Type="${XML_NS}/styles" Target="styles.xml"/>`;
+    return '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+      '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">' +
+      `${rels}${styles}</Relationships>`;
+  }
+
+  toBytes() {
+    if (!this.sheets.length) throw new Error('refusing to write a workbook without sheets');
+    const parts = [
+      ['[Content_Types].xml', contentTypesXml(this.sheets.length)],
+      ['_rels/.rels', '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+        '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">' +
+        '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" ' +
+        'Target="xl/workbook.xml"/></Relationships>'],
+      ['xl/workbook.xml', this.workbookXml()],
+      ['xl/_rels/workbook.xml.rels', this.workbookRelsXml()],
+      ['xl/styles.xml', STYLES_XML],
+    ];
+    this.sheets.forEach((sheet, i) => parts.push([`xl/worksheets/sheet${i + 1}.xml`, sheetXml(sheet)]));
+    return zip(parts);
+  }
+
+  /** Trigger a browser download of the finished workbook. */
+  download(filename) {
+    const bytes = this.toBytes();
+    const url = URL.createObjectURL(new Blob([bytes], {
+      type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    }));
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    return bytes.length;
+  }
+}
+</script>
+
+<script id="xlsx-report">
+/**
+ * xlsx-report.js — the four-sheet salary report shared by the Web UI.
+ *
+ * Part of 工资计算器（中国）/ china-salary-calculator.
+ *
+ * This is the workbook-level twin of `build_workbook()` in src/salary_calculator.py: same sheets,
+ * same row order, same labels, same style indices. `web/xlsx-sample.mjs --report` rebuilds the
+ * Shanghai 2023 case with the JS engine and `src/test_xlsx_writer.py` compares those bytes with
+ * what the Python CLI produces, so "the CLI Excel" and "the Web Excel" are provably the same file
+ * for the same inputs — with no third-party spreadsheet library anywhere.
+ *
+ * Sheet list (one more than income-calc, which has no annual-bonus feature at all):
+ *   年度汇总 / 逐月明细 / 政策参数 / 年终奖对比
+ */
+
+/**
+ * The 25 report columns, in CSV/XLSX order. This is the single web-side definition (the CSV export
+ * in index.html reuses it) and it must stay identical to `CSV_COLUMNS` in src/salary_calculator.py;
+ * the byte-equality test catches any drift because the header row lands inside the workbook.
+ */
+const DETAIL_COLS = [
+  ['月份', 'month_no'], ['半年度', 'half'], ['税前月薪', 'salary'],
+  ['养老基数', 'sb_p'], ['医疗基数', 'sb_m'], ['失业基数', 'sb_u'], ['公积金基数', 'housing_base'],
+  ['养老_个人', 'pension_p'], ['医疗_个人', 'medical_p'], ['失业_个人', 'unemploy_p'],
+  ['公积金_个人', 'housing_p'], ['补充公积金_个人', 'extra_p'], ['五险一金_个人合计', 'social_p_total'],
+  ['养老_单位', 'pension_o'], ['医疗_单位', 'medical_o'], ['失业_单位', 'unemploy_o'],
+  ['工伤_单位', 'injury_o'], ['公积金_单位', 'housing_o'], ['补充公积金_单位', 'extra_o'],
+  ['五险一金_单位合计', 'social_o_total'],
+  ['专项附加扣除_当月', 'special_monthly'],
+  ['累计应纳税所得额', 'cum_taxable'], ['累计个税', 'cum_tax'],
+  ['当月个税', 'month_tax'], ['实发到手', 'net'],
+];
+
+const pct = (value) => percent(value);
+
+/**
+ * @param {Object} ctx computed inputs; every field comes from the same engine the page shows.
+ * @param {Array<Object>} ctx.months 12 monthly records from computeYear()
+ * @param {Array<Array<string>>} ctx.detailCols [display, key] pairs, identical to CSV_COLS
+ * @param {Array<Array<number>>} ctx.bounds [H1 bounds, H2 bounds], six social-insurance numbers each
+ * @param {Array<Array<number>>} ctx.housingBounds [H1, H2] housing-fund bounds
+ * @param {Object} ctx.rates employee/employer rates as fractions
+ */
+function buildReport(ctx) {
+  const { months, detailCols, cityName, year, verifiedOn } = ctx;
+  const sum = (key) => months.reduce((acc, m) => acc + (m[key] || 0), 0);
+  const annualGross = sum('salary');
+  const annualContrib = sum('social_p_total');
+  const annualNet = sum('net');
+  const annualSpecial = sum('special_monthly');
+  const annualOrg = sum('social_o_total');
+  const withheld = months[months.length - 1].cum_tax;
+
+  // 年度汇总（与 CLI 的 estimate_annual_settlement 同口径）
+  const taxFreeYear = ctx.taxFreeMonthly * 12;
+  const annualTaxable = Math.max(0, annualGross - taxFreeYear - annualContrib - annualSpecial
+    - Math.max(0, ctx.annualMedical || 0));
+  const settlementTax = ctx.cumulativeTax(annualTaxable);
+  const refund = withheld - settlementTax;
+  const title = `${cityName} ${year} 年度工资测算`;
+
+  const summary = [
+    [[title, 2], ['', 0]],
+    [['指标', 1], ['金额（元）', 1]],
+    [['全年税前工资', 5], [money(annualGross), 3]],
+    [['五险一金合计（个人）', 5], [money(annualContrib), 3]],
+    [['专项附加扣除合计', 5], [money(annualSpecial), 3]],
+    [['大病医疗扣除（限 8 万）', 5], [money(Math.max(0, ctx.annualMedical || 0)), 3]],
+    [['已预扣个税合计', 5], [money(withheld), 3]],
+    [['汇算应纳个税', 5], [money(settlementTax), 3]],
+    [[refund >= 0 ? '预计退税' : '预计补税', 5], [money(Math.abs(refund)), 3]],
+    [['全年应纳税所得额', 5], [money(annualTaxable), 3]],
+    [['全年实发到手', 6], [money(annualNet), 6]],
+    [['月均实发到手', 5], [money(annualNet / 12), 3]],
+    [['五险一金合计（单位）', 5], [money(annualOrg), 3]],
+    [['单位全年用工成本', 5], [money(annualGross + annualOrg), 3]],
+    [['实际税负率', 5], [annualGross ? pct(settlementTax / annualGross) : pct(0), 4]],
+  ];
+
+  const book = new XlsxBook();
+  book.addSheet('年度汇总', {
+    rows: summary, widths: [26, 20], merges: ['A1:B1'],
+    freeze: 'A3', titleRow: true, headerRow: 2,
+  });
+
+  // 逐月明细（列与 CSV 导出完全一致）
+  const detail = [detailCols.map(([name]) => [name, 1])];
+  for (const record of months) {
+    const row = { ...record, half: record.month_no <= 6 ? 'H1' : 'H2' };
+    detail.push(detailCols.map(([, key]) =>
+      (key === 'month_no' || key === 'half')
+        ? [String(row[key]), 0]
+        : [money(Number(row[key])), 3]));
+  }
+  book.addSheet('逐月明细', {
+    rows: detail, widths: [8, 8, 12, ...Array(22).fill(13)],
+    freeze: 'A2', autofilter: true, headerRow: 1,
+  });
+
+  // 政策参数
+  const [h1, h2] = ctx.bounds;
+  const [hp1, hp2] = ctx.housingBounds;
+  const money6 = (vals) => vals.map((v) => [money(v), 3]);
+  const r = ctx.rates;
+  const pad = (row) => row.concat(Array(9 - row.length).fill(['', 0]));
+  const policy = [
+    pad([[`${cityName} ${year} 年度参数（核实：${verifiedOn}）`, 2]]),
+    [['期间', 1], ['养老下限', 1], ['养老上限', 1], ['医疗下限', 1], ['医疗上限', 1],
+      ['失业下限', 1], ['失业上限', 1], ['公积金下限', 1], ['公积金上限', 1]],
+    [['1–6 月', 5], ...money6(h1), [money(hp1[0]), 3], [money(hp1[1]), 3]],
+    [['7–12 月', 5], ...money6(h2), [money(hp2[0]), 3], [money(hp2[1]), 3]],
+    Array(9).fill(['', 0]),
+    pad([['缴费比例', 1], ['个人', 1], ['单位', 1]]),
+    pad([['养老保险', 5], [pct(r.pension_emp), 4], [pct(r.pension_org), 4]]),
+    pad([['医疗保险', 5], [pct(r.medical_emp), 4], [pct(r.medical_org), 4]]),
+    pad([['失业保险', 5], [pct(r.unemploy_emp), 4], [pct(r.unemploy_org), 4]]),
+    pad([['工伤保险', 5], ['—', 5], [pct(r.injury_org), 4]]),
+    pad([['住房公积金（本次选用）', 5], [pct(ctx.housingPct / 100), 4], [pct(ctx.housingPct / 100), 4]]),
+    pad([['补充公积金（本次选用）', 5], [pct(ctx.extraPct / 100), 4], [pct(ctx.extraPct / 100), 4]]),
+    pad([['城市允许区间', 5], [`${ctx.housingRange[0]}%–${ctx.housingRange[1]}%`, 5],
+      [`补充 ${ctx.supplementRange[0]}%–${ctx.supplementRange[1]}%`, 5]]),
+  ];
+  book.addSheet('政策参数', {
+    rows: policy, widths: [22, 14, 14, 14, 14, 14, 14, 14, 14],
+    merges: ['A1:I1'], freeze: 'A3', titleRow: true, headerRow: 2,
+  });
+
+  // 年终奖双方案对比
+  const bonus = ctx.bonus || 0;
+  let bonusRows;
+  if (bonus > 0) {
+    const m0 = months[0];
+    // ctx.compareBonus returns {totalA, totalB, bonusTax}; the CLI wrapper returns the same keys.
+    const cmp = ctx.compareBonus(m0.salary, m0.social_p_total, m0.special_monthly, bonus);
+    const totalA = cmp.totalA;
+    const totalB = cmp.totalB;
+    const bonusTax = cmp.bonusTax;
+    bonusRows = [
+      [['年终奖双方案对比', 2], ['', 0]],
+      [['项目', 1], ['金额（元）', 1]],
+      [['年终奖金额', 5], [money(bonus), 3]],
+      [['方案A·单独计税（工资+奖金合计纳税）', 5], [money(totalA), 3]],
+      [['  其中奖金部分个税', 5], [money(bonusTax), 3]],
+      [['方案B·并入综合所得（合计纳税）', 5], [money(totalB), 3]],
+      [['推荐方案', 6],
+        [`方案${totalA <= totalB ? 'A（单独计税）' : 'B（并入综合所得）'}`, 6]],
+      [['节税金额', 6], [money(Math.abs(totalB - totalA)), 6]],
+    ];
+  } else {
+    bonusRows = [
+      [['年终奖双方案对比', 2], ['', 0]],
+      [['项目', 1], ['说明', 1]],
+      [['本次测算', 5], ['未填写年终奖，无方案对比；输入年终奖后重新导出即可生成', 5]],
+    ];
+  }
+  book.addSheet('年终奖对比', {
+    rows: bonusRows, widths: [34, 26], merges: ['A1:B1'],
+    freeze: 'A3', titleRow: true, headerRow: 2,
+  });
+
+  return book;
+}
+</script>
+
 <!-- Vue Application -->
 <script>
 const CFG = JSON.parse(document.getElementById('cfg-data').textContent);
@@ -965,6 +1559,11 @@ const app = createApp({
       useExtra: false,
       bonus: 0,
       targetNet: 0,
+      useDeclared: false,
+      declaredSocial1: 0,
+      declaredSocial2: 0,
+      declaredHousing1: 0,
+      declaredHousing2: 0,
       specialItems: [],
     });
 
@@ -1129,11 +1728,31 @@ const app = createApp({
         .map(item => ({ key: item.key, amount: item.amount, startMonth: item.startMonth, endMonth: item.endMonth }));
     });
 
+    // Computed: declared contribution bases (0 / empty means "follow the salary")
+    const declaredBases = computed(() => {
+      if (!params.useDeclared) return null;
+      const social = [params.declaredSocial1 || 0, params.declaredSocial2 || params.declaredSocial1 || 0];
+      const housing = [params.declaredHousing1 || 0, params.declaredHousing2 || params.declaredHousing1 || 0];
+      if (!social[0] && !social[1] && !housing[0] && !housing[1]) return null;
+      return { social, housing };
+    });
+
+    // Computed: the policy ranges shown as hints next to the declared-base fields
+    const baseRanges = computed(() => {
+      if (!session.value) return null;
+      return {
+        socialH1: [session.value.socialBounds(1)[0], session.value.socialBounds(1)[1]],
+        socialH2: [session.value.socialBounds(7)[0], session.value.socialBounds(7)[1]],
+        housingH1: session.value.housingBounds(1),
+        housingH2: session.value.housingBounds(7),
+      };
+    });
+
     // Computed: months12
     const months12 = computed(() => {
       if (!session.value) return null;
       return computeYear(session.value, params.salary, activeSpecialItems.value,
-        params.housingPct, params.useExtra ? params.extraPct : 0, CFG);
+        params.housingPct, params.useExtra ? params.extraPct : 0, CFG, declaredBases.value);
     });
 
     // Computed: monthDetail
@@ -1236,24 +1855,15 @@ const app = createApp({
         if (!session.value) return;
         inverseResult.value = inverseGrossFromNet(
           session.value, params.targetNet, activeSpecialItems.value,
-          params.housingPct, params.useExtra ? params.extraPct : 0, CFG
+          params.housingPct, params.useExtra ? params.extraPct : 0, CFG, declaredBases.value
         );
       }, 500);
     }
 
     // --- Export Functions (T7) ---
-    const CSV_COLS = [
-      ['月份','month_no'],['半年度','half'],['税前月薪','salary'],
-      ['养老基数','sb_p'],['医疗基数','sb_m'],['失业基数','sb_u'],['公积金基数','housing_base'],
-      ['养老_个人','pension_p'],['医疗_个人','medical_p'],['失业_个人','unemploy_p'],
-      ['公积金_个人','housing_p'],['补充公积金_个人','extra_p'],['五险一金_个人合计','social_p_total'],
-      ['养老_单位','pension_o'],['医疗_单位','medical_o'],['失业_单位','unemploy_o'],
-      ['工伤_单位','injury_o'],['公积金_单位','housing_o'],['补充公积金_单位','extra_o'],
-      ['五险一金_单位合计','social_o_total'],
-      ['专项附加扣除_当月','special_monthly'],
-      ['累计应纳税所得额','cum_taxable'],['累计个税','cum_tax'],
-      ['当月个税','month_tax'],['实发到手','net'],
-    ];
+    // Column list comes from the shared report module, which mirrors CSV_COLUMNS in
+    // src/salary_calculator.py (the byte-equality test catches any drift).
+    const CSV_COLS = DETAIL_COLS;
 
     function exportCSV() {
       const data = months12.value;
@@ -1279,29 +1889,41 @@ const app = createApp({
       URL.revokeObjectURL(url);
     }
 
+    // Zero-dependency Excel export: same writer + same four sheets as the CLI, works offline.
     function exportExcel() {
-      if (window.XLSX) { doExcelExport(); return; }
-      const script = document.createElement('script');
-      script.src = 'https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js';
-      script.onload = () => doExcelExport();
-      script.onerror = () => alert('无法加载 Excel 库（需联网）。请改用 CSV 导出。');
-      document.head.appendChild(script);
-    }
-
-    function doExcelExport() {
+      const sess = session.value;
       const data = months12.value;
-      if (!data || !data.length) return;
-      const rows = data.map(m => {
-        const hk = m.month_no <= 6 ? 'H1' : 'H2';
-        const obj = { ...m, half: hk };
-        const row = {};
-        CSV_COLS.forEach(([display, key]) => row[display] = obj[key] ?? '');
-        return row;
+      if (!sess || !data || !data.length) return;
+      const extraPct = params.useExtra ? params.extraPct : 0;
+      const book = buildReport({
+        months: data,
+        detailCols: CSV_COLS,
+        cityName: sess.city_name,
+        year: sess.year,
+        verifiedOn: sess._yearData.verified_on,
+        bounds: [sess.socialBounds(1), sess.socialBounds(7)],
+        housingBounds: [sess.housingBounds(1), sess.housingBounds(7)],
+        rates: {
+          pension_emp: sess.pension_emp, pension_org: sess.pension_org,
+          medical_emp: sess.medical_emp, medical_org: sess.medical_org,
+          unemploy_emp: sess.unemploy_emp, unemploy_org: sess.unemploy_org,
+          injury_org: sess.injury_org,
+        },
+        housingPct: params.housingPct,
+        extraPct: extraPct,
+        housingRange: [sess.housing_rate_min, sess.housing_rate_max],
+        supplementRange: [sess.extra_min, sess.extra_max],
+        taxFreeMonthly: sess.taxFreeMonthly,
+        annualMedical: annualMedicalDeduction.value,
+        bonus: params.bonus,
+        cumulativeTax: (taxable) => calcCumulativeTax(taxable, sess.taxBrackets),
+        compareBonus: (salary, socialP, specialM, bonusAmt) => {
+          const r = compareBonus(salary, socialP, specialM, bonusAmt, CFG);
+          return { totalA: r.totalA, totalB: r.totalB, bonusTax: r.bonusTaxA };
+        },
       });
-      const ws = XLSX.utils.json_to_sheet(rows);
-      const wb = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(wb, ws, '逐月明细');
-      XLSX.writeFile(wb, 'salary_' + params.city + '_' + params.year + '.xlsx');
+      const bytes = book.download(`工资计算器（中国）_${params.city}_${params.year}.xlsx`);
+      importStatus.value = `已导出 Excel（四个工作表，${(bytes / 1024).toFixed(0)} KB）`;
     }
 
     return {
@@ -1309,6 +1931,7 @@ const app = createApp({
       deductionDefs, isDeductionEnabled, toggleDeduction, getDeductionAmount,
       getDeductionField, setDeductionField, clampMonth,
       availableYears, headerSubtitle, session, months12, monthDetail,
+      declaredBases, baseRanges,
       activeSpecialItems, bonusResult, annualMedicalDeduction,
       settlementResult, settlementData,
       inverseResult, onInverseInput,

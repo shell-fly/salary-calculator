@@ -1,0 +1,87 @@
+# -*- coding: utf-8 -*-
+"""
+test_cli_smoke.py — end-to-end guard for the interactive CLI (`run.bat` / `run.sh` entry 1).
+
+Part of 工资计算器（中国）/ china-salary-calculator.
+
+Why this exists: the engine had 367 assertions across the two languages, but nothing ever
+drove `main()` itself. That blind spot hid a `KeyError: 'm'` in the 缴费基数核对 print
+(`sb['m']` instead of `sb['medical']`) which was present since the initial commit and made
+every CLI session die right after the first answer set. These checks feed real stdin, require
+exit code 0 and pin the numbers of the declared-base feature, so both the crash class and the
+new behaviour stay covered.
+
+Run: python src/test_cli_smoke.py
+"""
+import os
+import subprocess
+import sys
+
+HERE = os.path.dirname(os.path.abspath(__file__))
+CLI = os.path.join(HERE, "salary_calculator.py")
+
+FAILURES = []
+
+
+def check(ok, msg, detail=""):
+    if ok:
+        print(f"  PASS: {msg}")
+    else:
+        print(f"  FAIL: {msg} {detail}")
+        FAILURES.append(msg)
+
+
+def run_cli(answers):
+    """Drive the interactive CLI with a scripted stdin; return (returncode, stdout, stderr)."""
+    proc = subprocess.run(
+        [sys.executable, CLI],
+        input="\n".join(answers) + "\n",
+        capture_output=True, text=True, encoding="utf-8", errors="replace",
+        cwd=HERE,
+    )
+    return proc.returncode, proc.stdout or "", proc.stderr or ""
+
+
+# Common answer sheet:
+# city(default 上海) year(default) 月薪 第几个月 公积金比例 补充公积金
+HEAD = ["", "", "30000", "", "7", "n"]
+# 七项专项附加扣除全部不启用 → 年终奖 → 查看全年 → 汇算 → 不导出 → 不反推
+TAIL = ["n"] * 7 + ["0", "y", "n", "0", "n"]
+
+print("=== CLI: default behaviour (base follows the salary) ===")
+code, out, err = run_cli(HEAD + ["n"] + TAIL)
+check(code == 0, "default run exits 0", f"(code={code}, err={err[-300:]})")
+check("Traceback" not in err, "default run raises no traceback", err[-300:])
+check("按税前月薪" in out, "default run reports the salary as the contribution base")
+check("5,250.00" in out, "default 五险一金 = 5,250.00")
+check("24,157.50" in out, "default M1 到手 = 24,157.50")
+
+print("\n=== CLI: declared base at the statutory lower bounds ===")
+code, out, err = run_cli(HEAD + ["y", "7460", "", "2690", ""] + TAIL)
+check(code == 0, "declared-lower run exits 0", f"(code={code}, err={err[-300:]})")
+check("按单位申报基数" in out, "declared run labels the base as employer-declared")
+check("7,460.00" in out, "declared social base 7,460.00 shown")
+check("971.30" in out, "declared 五险一金 = 971.30")
+check("28,307.84" in out, "declared M1 到手 = 28,307.84 (more cash, but a higher annual tax bill)")
+
+print("\n=== CLI: declared base above the policy cap is clamped ===")
+code, out, err = run_cli(HEAD + ["y", "99999", "", "50000", ""] + TAIL)
+check(code == 0, "over-cap run exits 0", f"(code={code}, err={err[-300:]})")
+check("已按上下限取限" in out, "over-cap base is reported as clamped")
+check("37,302.00" in out, "over-cap base clamped to 37,302.00")
+check("6,527.71" in out, "over-cap 五险一金 = 6,527.71")
+
+print("\n=== CLI: inverse calculation honours the declared base ===")
+# 反推路径：年终奖 0 → 不看全年 → 不看汇算 → 不导出 → 反推 y + 目标 25000
+code, out, err = run_cli(HEAD + ["y", "7460", "", "2690", ""]
+                         + ["n"] * 7 + ["0", "n", "n", "0", "y", "25000"])
+check(code == 0, "inverse run exits 0", f"(code={code}, err={err[-300:]})")
+check("反推结果" in out, "inverse result printed")
+check("25,000" in out or "300,000" in out, "inverse reaches the requested take-home target")
+
+print("\n============================================")
+if FAILURES:
+    print(f"  {len(FAILURES)} ASSERTION(S) FAILED")
+    sys.exit(1)
+print("  ALL TESTS PASSED")
+sys.exit(0)

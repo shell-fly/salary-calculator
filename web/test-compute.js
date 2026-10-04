@@ -464,6 +464,98 @@ for (const [code, c] of Object.entries(CFG.cities)) {
 }
 
 // =====================================================================
+// Test 11: user-declared contribution bases (v3.6 P0)
+// Many employers declare the statutory lower bound instead of the real salary;
+// computeYear() must then use that declared base (still clamped to the policy range).
+// =====================================================================
+console.log('\n=== Declared contribution bases ===');
+
+const sessSH26 = createSession('shanghai', 2026, CFG);
+
+// (a) No declared base keeps the historic behaviour: 30000 -> 5250 / tax 592.50 / net 24157.50
+const plain = computeYear(sessSH26, 30000, [], 7, 0, CFG);
+assertClose(plain[0].social_p_total, 5250, 0.005, 'SH 2026 M1 default 五险一金 = 5250');
+assertClose(plain[0].net, 24157.50, 0.005, 'SH 2026 M1 default 到手 = 24157.50');
+
+// (b) Declared at the statutory lower bounds (2026 H1 social 7460 / housing 2690)
+const lowBase = computeYear(sessSH26, 30000, [], 7, 0, CFG, { social: [7460, 7546], housing: [2690, 2740] });
+assertClose(lowBase[0].sb_p, 7460, 0.005, 'SH 2026 M1 declared social base = 7460');
+assertClose(lowBase[0].housing_base, 2690, 0.005, 'SH 2026 M1 declared housing base = 2690');
+// 596.80 + 149.20 + 37.30 + round(2690*7%)=188
+assertClose(lowBase[0].social_p_total, 971.30, 0.005, 'SH 2026 M1 五险一金 at lower bounds = 971.30');
+assertClose(lowBase[0].month_tax, 720.86, 0.01, 'SH 2026 M1 个税 = 720.86 (taxable 24028.70)');
+assertClose(lowBase[0].net, 28307.84, 0.01, 'SH 2026 M1 到手 = 28307.84');
+// The employer side must follow the same declared base (pension_org 16%)
+assertClose(lowBase[0].pension_o, 1193.60, 0.005, 'SH 2026 M1 单位养老 = 7460*16% = 1193.60');
+
+// (c) H2 switches to the 2026 H2 bounds once the declared base crosses them
+assertClose(lowBase[6].sb_p, 7546, 0.005, 'SH 2026 M7 declared social base = 7546 (H2)');
+assertClose(lowBase[6].housing_base, 2740, 0.005, 'SH 2026 M7 declared housing base = 2740 (H2)');
+
+// (d) A declared base above the upper bound is still clamped (never exceeds policy max)
+const highBase = computeYear(sessSH26, 30000, [], 7, 0, CFG, { social: [99999, 99999], housing: [50000, 50000] });
+assertClose(highBase[0].sb_p, 37302, 0.005, 'SH 2026 M1 declared 99999 clamped to 37302');
+assertClose(highBase[0].housing_base, 37302, 0.005, 'SH 2026 M1 declared housing 50000 clamped to 37302');
+assertClose(highBase[0].social_p_total, 6527.71, 0.005, 'SH 2026 M1 五险一金 at upper cap = 6527.71');
+assertClose(highBase[0].net, 22918.13, 0.01, 'SH 2026 M1 到手 at upper cap = 22918.13');
+
+// (e) Only one of the two bases may be declared; the other follows the salary
+const partial = computeYear(sessSH26, 30000, [], 7, 0, CFG, { housing: [2690, 2740] });
+assertClose(partial[0].sb_p, 30000, 0.005, 'SH 2026 M1 social base follows salary when undeclared');
+assertClose(partial[0].housing_base, 2690, 0.005, 'SH 2026 M1 housing base uses declared value');
+// 3150 + 188 = 3338; taxable 30000-5000-3338 = 21662 -> 3% = 649.86; net = 30000-3338-649.86
+assertClose(partial[0].social_p_total, 3338, 0.005, 'SH 2026 M1 五险一金 = 3338 (mixed)');
+assertClose(partial[0].net, 26012.14, 0.01, 'SH 2026 M1 到手 = 26012.14 (mixed)');
+
+// (f) Zero / empty entries mean "follow salary" so the UI can leave fields blank
+const zeros = computeYear(sessSH26, 30000, [], 7, 0, CFG, { social: [0, 0], housing: [0, 0] });
+assertClose(zeros[0].social_p_total, 5250, 0.005, 'SH 2026 M1 blank declared base behaves as default');
+assertClose(zeros[6].social_p_total, 5250, 0.005, 'SH 2026 M7 blank declared base behaves as default');
+
+// (g) The gross-for-net inverse must honour the same declared base
+const invLow = inverseGrossFromNet(sessSH26, 25000, [], 7, 0, CFG, { social: [7460, 7546], housing: [2690, 2740] });
+assertClose(invLow.net_12m, 25000 * 12, 12, 'inverse with declared base hits the 12-month target net');
+assertClose(invLow.months[0].sb_p, 7460, 0.005, 'inverse keeps the declared base in its solution');
+const invPlain = inverseGrossFromNet(sessSH26, 25000, [], 7, 0, CFG);
+// Declaring the lower bound cuts the personal contribution, so cash net rises and the
+// gross needed to hit the same net target drops (this is exactly the trap the tool must show)
+assert(invLow.gross < invPlain.gross, 'declared lower base yields a higher net, so a lower gross suffices');
+
+// =====================================================================
+// Test 12: the engine inlined in index.html must not drift from compute.js
+// (index.html is the shipped artifact; compute.js is the tested source)
+// =====================================================================
+console.log('\n=== Inlined engine drift guard ===');
+
+const htmlPath = join(__dirname, 'index.html');
+const html = readFileSync(htmlPath, 'utf-8');
+const enginePath = join(__dirname, 'compute.js');
+const engineSource = readFileSync(enginePath, 'utf-8');
+const OPEN_TAG = '<script id="compute-engine">';
+const CLOSE_TAG = '</script>';
+
+assert(html.includes(OPEN_TAG), 'index.html carries the <script id="compute-engine"> block');
+const openAt = html.indexOf(OPEN_TAG);
+const closeAt = html.indexOf(CLOSE_TAG, openAt + OPEN_TAG.length);
+const inlinedEngine = html.slice(openAt + OPEN_TAG.length, closeAt).trim();
+const expectedEngine = engineSource.split('\n')
+  .filter((line) => !line.startsWith('import '))
+  .map((line) => (line.startsWith('export ') ? line.slice('export '.length) : line))
+  .join('\n').trim();
+assert(inlinedEngine === expectedEngine,
+  'index.html inlined engine is byte-identical to compute.js (run: node web/inline-compute.mjs)');
+assert(inlinedEngine.includes('function declaredBase('), 'declaredBase() reached the inlined engine');
+assert(!/cdn\.jsdelivr|unpkg\/sheetjs|xlsx\.full\.min\.js/i.test(html),
+  'index.html still free of spreadsheet CDN dependencies');
+
+// The declared-base inputs must accept statutory bounds such as 7460 / 2690 (a coarse
+// step="100" makes those values natively :invalid in the browser).
+const declaredInputs = html.match(/v-model\.number="params\.declared(?:Social|Housing)\d"[^>]*/g) || [];
+assert(declaredInputs.length === 4, 'index.html exposes four declared-base inputs');
+assert(declaredInputs.every((tag) => /step="1"/.test(tag)),
+  'declared-base inputs use step="1" so statutory bounds stay valid');
+
+// =====================================================================
 // Summary
 // =====================================================================
 console.log('\n============================================');

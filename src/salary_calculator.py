@@ -17,8 +17,9 @@ Features:
   5) Monthly take-home pay and clear itemized output
   6) Annual settlement (汇算清缴) refund/tax-due estimation
   7) Inverse calculation: binary-search gross salary from target net take-home
-  8) Export 12-month detail to CSV (zero-dep) or Excel (.xlsx via openpyxl,
-     optional)
+  8) Export the 12-month detail plus a yearly summary, policy bounds and the
+     bonus comparison to CSV or a styled .xlsx — both zero-dependency (the
+     workbook is written by `xlsx_writer.py`, no openpyxl required)
 
 Usage: double-click run.bat, or run `python salary_calculator.py`.
 Parameters (cities, years, half-year bases, tax brackets, etc.) are loaded
@@ -34,6 +35,10 @@ import json
 import math
 import csv
 import datetime
+
+# The xlsx writer/report modules live next to this script; make the import work from any cwd.
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from xlsx_report import build_report  # noqa: E402
 
 
 # =====================================================================
@@ -143,6 +148,11 @@ class Session:
     def summary_line(self):
         return (f"{self.city_name} {self.year} 年度（数据核实日期："
                 f"{self._year_data.get('verified_on', '未知')}）")
+
+    @property
+    def verified_on(self):
+        """Announcement/verification date of this year row."""
+        return self._year_data.get("verified_on", "未知")
 
 
 # =====================================================================
@@ -265,18 +275,44 @@ def compute_month(sess, month_no, salary, social_base_dict, housing_base,
     }
 
 
-def compute_year(sess, salary, special_items, housing_pct, extra_pct):
-    """Run 12 months using each month's own half-year bounds. Returns list[dict]."""
+def declared_base(declared, salary, month):
+    """
+    Resolve one declared contribution base for a month.
+    `declared` is a [h1, h2] pair; an empty/None/0 entry means "follow the salary".
+    """
+    if not declared:
+        return salary
+    value = declared[0 if month <= 6 else 1]
+    try:
+        value = float(value)
+    except (TypeError, ValueError):
+        return salary
+    return value if value > 0 else salary
+
+
+def compute_year(sess, salary, special_items, housing_pct, extra_pct, declared=None):
+    """
+    Run 12 months using each month's own half-year bounds. Returns list[dict].
+
+    declared (optional): {"social": [h1, h2], "housing": [h1, h2]} contribution bases as
+    actually declared by the employer. Many companies declare the statutory lower bound
+    instead of the real salary, so the base must be overridable; it is still clamped to
+    the policy range of the selected city/year/half.
+    """
     results = []
+    social_declared = (declared or {}).get("social")
+    housing_declared = (declared or {}).get("housing")
     for m in range(1, 13):
         plo, phi, mlo, mhi, ulo, uhi = sess.social_bounds(m)
         hlo, hhi = sess.housing_bounds(m)
+        s_base = declared_base(social_declared, salary, m)
+        h_base = declared_base(housing_declared, salary, m)
         sb = {
-            "pension": clamp(salary, plo, phi),
-            "medical": clamp(salary, mlo, mhi),
-            "unemployment": clamp(salary, ulo, uhi),
+            "pension": clamp(s_base, plo, phi),
+            "medical": clamp(s_base, mlo, mhi),
+            "unemployment": clamp(s_base, ulo, uhi),
         }
-        hb = clamp(salary, hlo, hhi)
+        hb = clamp(h_base, hlo, hhi)
         results.append(compute_month(sess, m, salary, sb, hb,
                                      special_items, housing_pct, extra_pct))
     return results
@@ -317,7 +353,7 @@ def estimate_annual_settlement(months_12, annual_medical=0.0):
 
 
 def inverse_gross_from_net(sess, target_net, special_items, housing_pct, extra_pct,
-                           tol=0.01, max_iter=120):
+                           declared=None, tol=0.01, max_iter=120):
     """
     Binary-search gross monthly salary such that 12-month net take-home
     (sum of 12 months' net) matches target_net * 12 within tol.
@@ -328,7 +364,7 @@ def inverse_gross_from_net(sess, target_net, special_items, housing_pct, extra_p
     last = None
     for _ in range(max_iter):
         mid = (lo + hi) / 2.0
-        months = compute_year(sess, mid, special_items, housing_pct, extra_pct)
+        months = compute_year(sess, mid, special_items, housing_pct, extra_pct, declared)
         net_total = sum(m["net"] for m in months)
         last = (mid, months, net_total)
         if abs(net_total - target_total) <= tol:
@@ -688,36 +724,51 @@ def export_csv(sess, months_12, path=None):
     return path
 
 
-def export_xlsx(sess, months_12, path=None):
-    try:
-        import openpyxl
-        from openpyxl.styles import numbers, Font, Alignment, Border, Side
-    except ImportError:
-        return None
+def build_workbook(sess, months_12, annual_medical=0.0, bonus=0.0,
+                   housing_pct=0, extra_pct=0):
+    """
+    Collect the CLI's computed values into the shared report context.
+
+    The workbook itself is assembled by `xlsx_report.build_report()`, the Python twin of
+    `web/xlsx-report.js`, on top of the byte-identical writer port (`xlsx_writer.py` vs
+    `web/xlsx-writer.js`); `src/test_xlsx_writer.py` proves that a CLI export and a browser
+    export of the same inputs are the same file, byte for byte.
+    """
+    def bonus_summary(salary, social_p_monthly, special_monthly, bonus_amount):
+        """Adapt compare_bonus() to the {totalA, totalB, bonusTax} shape the report expects."""
+        total_a, total_b, _, bonus_tax_a, _ = compare_bonus(
+            salary, social_p_monthly, special_monthly, bonus_amount)
+        return {"totalA": total_a, "totalB": total_b, "bonusTax": bonus_tax_a}
+
+    return build_report({
+        "months": months_12,
+        "detail_cols": CSV_COLUMNS,
+        "city_name": sess.city_name,
+        "year": sess.year,
+        "verified_on": sess.verified_on,
+        "bounds": [list(sess.social_bounds(1)), list(sess.social_bounds(7))],
+        "housing_bounds": [list(sess.housing_bounds(1)), list(sess.housing_bounds(7))],
+        "rates": {"pension_emp": sess.pension_emp, "pension_org": sess.pension_org,
+                  "medical_emp": sess.medical_emp, "medical_org": sess.medical_org,
+                  "unemploy_emp": sess.unemploy_emp, "unemploy_org": sess.unemploy_org,
+                  "injury_org": sess.injury_org},
+        "housing_pct": housing_pct,
+        "extra_pct": extra_pct,
+        "housing_range": [sess.housing_rate_min, sess.housing_rate_max],
+        "supplement_range": [sess.extra_min, sess.extra_max],
+        "tax_free_monthly": TAX_FREE_MONTHLY,
+        "annual_medical": annual_medical,
+        "bonus": bonus,
+        "cumulative_tax": calc_cumulative_tax,
+        "compare_bonus": bonus_summary,
+    })
+
+
+def export_xlsx(sess, months_12, path=None, annual_medical=0.0, bonus=0.0,
+                housing_pct=0, extra_pct=0):
+    """Write the styled four-sheet workbook with no third-party dependency."""
     path = path or _export_path("xlsx")
-    wb = openpyxl.Workbook()
-    ws = wb.active
-    ws.title = "逐月明细"
-    headers = [k for k, _ in CSV_COLUMNS]
-    ws.append(headers)
-    for cell in ws[1]:
-        cell.font = Font(bold=True)
-        cell.alignment = Alignment(horizontal="center")
-    for r in months_12:
-        row = _row_from_record(sess, r)
-        ws.append([row.get(display, "") for display, _ in CSV_COLUMNS])
-    money_fmt = '#,##0.00'
-    money_cols = {i for i, (_, key) in enumerate(CSV_COLUMNS, start=1)
-                  if key not in ("month_no", "half")}
-    for row in ws.iter_rows(min_row=2, max_row=ws.max_row):
-        for c in row:
-            if c.column in money_cols and isinstance(c.value, (int, float)):
-                c.number_format = money_fmt
-    for col_cells in ws.columns:
-        length = max(len(str(c.value or "")) for c in col_cells)
-        ws.column_dimensions[col_cells[0].column_letter].width = min(length + 2, 24)
-    ws.freeze_panes = "A2"
-    wb.save(path)
+    build_workbook(sess, months_12, annual_medical, bonus, housing_pct, extra_pct).save(path)
     return path
 
 
@@ -763,19 +814,42 @@ def main():
     else:
         extra_pct = 0
 
+    # Declared contribution bases (many employers declare the statutory lower bound, not
+    # the real salary; that changes both the take-home cash and the withheld tax)
+    declared = None
+    if ask_yn("\n【申报基数】默认按税前月薪作为缴费基数，是否改为单位实际申报的基数？ (y/n，默认 n): "):
+        p_lo, p_hi, _, _, _, _ = sess.social_bounds(1)
+        h_lo, h_hi = sess.housing_bounds(1)
+        print(f"  提示：留空或 0 表示跟随月薪 {fmt(salary)} 元；填写后仍会被限制在该年度政策区间内。")
+        s1 = ask_float(f"  上半年社保申报基数（元，参考区间 {fmt(p_lo)}~{fmt(p_hi)}）：",
+                       default=0, lo=0, hi=10_000_000)
+        s2 = ask_float(f"  下半年社保申报基数（元，默认同上）：", default=s1, lo=0, hi=10_000_000)
+        f1 = ask_float(f"  上半年公积金缴存基数（元，参考区间 {fmt(h_lo)}~{fmt(h_hi)}）：",
+                       default=0, lo=0, hi=10_000_000)
+        f2 = ask_float(f"  下半年公积金缴存基数（元，默认同上）：", default=f1, lo=0, hi=10_000_000)
+        if max(s1, s2, f1, f2) > 0:
+            declared = {"social": [s1, s2], "housing": [f1, f2]}
+        else:
+            print("  四项均为 0，按默认（跟随月薪）处理。")
+
     special_items = collect_special_deductions(sess)
 
     # Compute single month using that month's half-year bounds
     plo, phi, mlo, mhi, ulo, uhi = sess.social_bounds(month_no)
     hlo, hhi = sess.housing_bounds(month_no)
-    sb = {"pension": clamp(salary, plo, phi),
-          "medical": clamp(salary, mlo, mhi),
-          "unemployment": clamp(salary, ulo, uhi)}
-    hb = clamp(salary, hlo, hhi)
+    s_base = declared_base((declared or {}).get("social"), salary, month_no)
+    h_base = declared_base((declared or {}).get("housing"), salary, month_no)
+    sb = {"pension": clamp(s_base, plo, phi),
+          "medical": clamp(s_base, mlo, mhi),
+          "unemployment": clamp(s_base, ulo, uhi)}
+    hb = clamp(h_base, hlo, hhi)
     r = compute_month(sess, month_no, salary, sb, hb, special_items, housing_pct, extra_pct)
 
-    print(f"\n【缴费基数核对】社保 养老{fmt(sb['pension'])}/医疗{fmt(sb['m'])}/失业{fmt(sb['u'])} 元/月；"
-          f"公积金 {fmt(hb)} 元/月")
+    src = "单位申报基数" if declared else "税前月薪"
+    capped = "" if (s_base == sb["pension"] and s_base == sb["medical"]
+                    and s_base == sb["unemployment"] and h_base == hb) else "（超出政策区间，已按上下限取限）"
+    print(f"\n【缴费基数核对】按{src}：社保 养老{fmt(sb['pension'])}/医疗{fmt(sb['medical'])}/"
+          f"失业{fmt(sb['unemployment'])} 元/月；公积金 {fmt(hb)} 元/月{capped}")
 
     show_monthly(sess, r, special_items)
 
@@ -787,16 +861,16 @@ def main():
         show_bonus_compare(sess, salary, r["social_p_total"], special_m_for_bonus, bonus_q)
 
     # Full year
-    months_12 = compute_year(sess, salary, special_items, housing_pct, extra_pct)
+    months_12 = compute_year(sess, salary, special_items, housing_pct, extra_pct, declared)
     if ask_yn("\n是否查看全年 1~12 月逐月个税与到手工资演化？ (y/n，默认 n): "):
         show_yearly_table(sess, months_12)
 
     # Annual settlement
+    annual_medical = 0.0
+    for k, amt, s, e in special_items:
+        if k == "medical":
+            annual_medical += amt * (e - s + 1)
     if ask_yn("\n是否查看年度汇算清缴退税估算？ (y/n，默认 n): "):
-        annual_medical = 0.0
-        for k, amt, s, e in special_items:
-            if k == "medical":
-                annual_medical += amt * (e - s + 1)
         show_settlement(sess, months_12, annual_medical)
 
     # Export
@@ -806,16 +880,14 @@ def main():
         p = export_csv(sess, months_12)
         print(f"  已导出 CSV：{p}")
     if choice in (2, 3):
-        p = export_xlsx(sess, months_12)
-        if p:
-            print(f"  已导出 Excel：{p}")
-        else:
-            print("  未检测到 openpyxl，无法导出 Excel。可：pip install openpyxl，或改用 CSV。")
+        p = export_xlsx(sess, months_12, annual_medical=annual_medical, bonus=bonus_q,
+                        housing_pct=housing_pct, extra_pct=extra_pct)
+        print(f"  已导出 Excel（四个工作表：年度汇总/逐月明细/政策参数/年终奖对比）：{p}")
 
     # Inverse
     if ask_yn("\n是否使用【二分反推税前月薪】（已知目标税后，反推应发）？ (y/n，默认 n): "):
         target = ask_float("  请输入目标月均到手工资（元）：", lo=0, hi=10_000_000)
-        res = inverse_gross_from_net(sess, target, special_items, housing_pct, extra_pct)
+        res = inverse_gross_from_net(sess, target, special_items, housing_pct, extra_pct, declared)
         print(f"\n  反推结果：税前月薪 ≈ {fmt(res['gross'])} 元")
         print(f"  对应全年到手合计 ≈ {fmt(res['net_12m'])} 元（目标 {fmt(target*12)} 元）")
         print(f"  全年五险一金（个人）≈ {fmt(res['contrib_12m'])} 元")
