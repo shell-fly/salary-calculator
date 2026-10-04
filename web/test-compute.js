@@ -440,6 +440,30 @@ assert(JSON.stringify(CFG.cities.guangzhou.years['2024'].h1.social_base)
   'GZ 2024 bounds differ across halves (Guangdong July year)');
 
 // =====================================================================
+// Test 10: remaining 2025 announcement dates (v3.4 verification)
+// =====================================================================
+console.log('\n=== 2025 announcement dates ===');
+
+// 上海：市人社局 2025-09-18 发布「本市调整 2025 年度社保缴费基数上下限」（上限 37302、下限 7460）
+assert(CFG.cities.shanghai.years['2025'].verified_on === '2025-09-18', 'SH 2025 verified_on = 2025-09-18');
+assert(JSON.stringify(CFG.cities.shanghai.years['2025'].h2.social_base) === '[7460,37302]', 'SH 2025 h2 social [7460,37302]');
+// 北京：关于 2025 年度各项社会保险缴费工资基数上下限的通告（rsj.beijing.gov.cn 2025-09-18）
+assert(CFG.cities.beijing.years['2025'].verified_on === '2025-09-18', 'BJ 2025 verified_on = 2025-09-18');
+assert(JSON.stringify(CFG.cities.beijing.years['2025'].h2.social_base) === '[7162,35811]', 'BJ 2025 h2 social [7162,35811]');
+// 江苏：苏人社发〔2025〕33号（2025-09-18，执行 2025 全年 [4952,24762]）
+assert(CFG.cities.nanjing.years['2025'].verified_on === '2025-09-18', 'NJ 2025 verified_on = 2025-09-18');
+for (const half of ['h1', 'h2']) {
+  assert(JSON.stringify(CFG.cities.nanjing.years['2025'][half].social_base) === '[4952,24762]',
+    `NJ 2025 ${half} social [4952,24762] (calendar year)`);
+}
+// No row may keep an alignment date any more
+for (const [code, c] of Object.entries(CFG.cities)) {
+  for (const [year, row] of Object.entries(c.years)) {
+    assert(row.verified_on !== '2026-10-04', `${code} ${year} verified_on is a real announcement date`);
+  }
+}
+
+// =====================================================================
 // Summary
 // =====================================================================
 console.log('\n============================================');
