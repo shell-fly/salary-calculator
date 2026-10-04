@@ -1,2 +1,3 @@
 # Ensure shell scripts use LF line endings
 run.sh text eol=lf
+deploy-pages.sh text eol=lf

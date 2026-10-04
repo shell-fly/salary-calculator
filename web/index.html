@@ -4,6 +4,16 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>China Salary Calculator</title>
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#22a06e">
+<meta name="background_color" content="#f5f7fa">
+<meta name="description" content="中国大陆 8 城市五险一金 + 个税 + 年终奖 + 汇算清缴计算器（离线可用）">
+<link rel="icon" type="image/png" sizes="32x32" href="icons/favicon-32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="icons/favicon-16.png">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="工资计算器">
 <script>/* Vue 3 runtime - inlined for offline use */
 /**
 * vue v3.5.43
@@ -1186,6 +1196,20 @@ const app = createApp({
 });
 
 app.mount('#app');
+</script>
+<script>
+// Register the service worker only when served over http(s).
+// Opening index.html via file:// (double-click / phone file) still works fully
+// offline as a single file, but SW cannot register there — so we skip it to
+// avoid console errors. PWA install / add-to-home-screen applies to the deployed site.
+if ('serviceWorker' in navigator && /^https?:$/.test(location.protocol)) {
+  window.addEventListener('load', function () {
+    var base = location.pathname.replace(/[^/]*$/, '');
+    navigator.serviceWorker.register(base + 'sw.js').catch(function (e) {
+      console.warn('SW registration failed:', e);
+    });
+  });
+}
 </script>
 </body>
 </html>

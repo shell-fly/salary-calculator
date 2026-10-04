@@ -116,6 +116,50 @@ The JS engine is numerically equivalent to the Python CLI; run the Node regressi
 
 ---
 
+## 🌐 部署为网址 & PWA 安装 / Deploy & Install
+
+把 Web UI 部署成网址后,手机/电脑可**扫码即用**并**安装为 App**(添加到主屏幕、离线可用)。
+
+> ⚠️ PWA 安装/离线缓存依赖 Service Worker,**仅在 http(s) 部署下生效**;本地 `file://` 双击打开仍是完整单文件离线应用,只是不触发"安装"。
+
+### 一键脚本 / One-click script
+
+```bash
+# Windows
+ deploy-pages.bat            # 或指定远程: deploy-pages.bat gitee / github
+
+# macOS / Linux
+ bash deploy-pages.sh       # 可选参数: gitee | github | both
+```
+
+脚本会校验 PWA 文件、提交并推送到已配置的远程,然后打印各平台的启用步骤。
+
+### GitHub Pages（自动部署）
+
+1. 仓库已内置 [`.github/workflows/deploy-pages.yml`](.github/workflows/deploy-pages.yml)，自动发布 `web/` 目录。
+2. 一次性开启：Settings → Pages → Source 选 **GitHub Actions**。
+3. 推送到 main/master 后，Actions 自动部署，访问 `https://<用户名>.github.io/<仓库名>/`。
+
+### Gitee Pages（国内访问快）
+
+1. 需先完成**实名认证**。
+2. 仓库页 → Services → **Gitee Pages** → 启用；部署分支选 master/main，**目录填 `web`** → 启动。
+3. 访问控制台给出的 `https://<用户名>.gitee.io/<仓库名>/`。（更新内容后需手动点"更新"重新发布。）
+
+### 安装为 App / Install
+
+浏览器打开部署后的网址 →
+- **安卓 Chrome**：地址栏右侧"安装"图标，或菜单 → "安装应用/添加到主屏幕"。
+- **iOS Safari**：分享 → "添加到主屏幕"。
+- **桌面 Chrome/Edge**：地址栏右侧安装图标。
+安装后独立窗口启动、离线可用、带应用图标。
+
+Deploy the site (one-click script or GitHub/Gitee Pages), then open the URL and use the browser's
+"Install / Add to Home Screen" to get a standalone, offline-capable app icon. PWA install requires
+http(s); opening `index.html` via `file://` still works as a full offline single file.
+
+---
+
 ## 📚 文档 / Docs
 
 - [`docs/upgrade-changelog.md`](docs/upgrade-changelog.md) — v1→v2→v3 升级变更说明 / changelog
