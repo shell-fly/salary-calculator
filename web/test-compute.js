@@ -236,10 +236,84 @@ console.log('\n=== Shenzhen 2026 (dict social_base format) ===');
 
 const sessSZ = createSession('shenzhen', 2026, CFG);
 const [splo, sphl, smlo, smhl, suLo, suhi] = sessSZ.socialBounds(1);
-// h1: pension [4775, 27549], medical [6733, 33666], unemployment [2520, 44934]
+// h1: pension [4775, 27549], medical [6727, 33633] (2026自然年度官方值), unemployment [2520, 44934]
 assert(splo === 4775 && sphl === 27549, 'SZ pension bounds [4775,27549]');
-assert(smlo === 6733 && smhl === 33666, 'SZ medical bounds [6733,33666]');
+assert(smlo === 6727 && smhl === 33633, 'SZ medical bounds 2026 [6727,33633]');
 assert(suLo === 2520 && suhi === 44934, 'SZ unemployment bounds [2520,44934]');
+
+// =====================================================================
+// Test 7: Historical years 2023/2024 coverage (parity with income-calc)
+// =====================================================================
+console.log('\n=== 2023/2024 historical year coverage ===');
+
+const CITY_CODES = ['shanghai', 'beijing', 'guangzhou', 'hangzhou', 'shenzhen', 'nanjing', 'hefei', 'wuhu'];
+for (const code of CITY_CODES) {
+  for (const y of ['2023', '2024', '2025', '2026']) {
+    assert(!!CFG.cities[code].years[y], `${code} has year ${y}`);
+  }
+}
+
+// Shanghai 2023/2024 — cross-checked against the official 历年对照表 in the calibration report
+// (2023: 7310/36549, 2024: 7384/36921 are the H2 values of those social-insurance years).
+const sh23 = CFG.cities.shanghai.years['2023'];
+assert(sh23.h1.social_base[0] === 6520 && sh23.h1.social_base[1] === 34188, 'SH 2023 h1 social [6520,34188]');
+assert(sh23.h2.social_base[0] === 7310 && sh23.h2.social_base[1] === 36549, 'SH 2023 h2 social [7310,36549]');
+assert(sh23.h1.housing_base[0] === 2590 && sh23.h1.housing_base[1] === 34188, 'SH 2023 h1 housing [2590,34188]');
+const sh24 = CFG.cities.shanghai.years['2024'];
+assert(sh24.h1.social_base[0] === 7310 && sh24.h1.social_base[1] === 36549, 'SH 2024 h1 social [7310,36549]');
+assert(sh24.h2.social_base[0] === 7384 && sh24.h2.social_base[1] === 36921, 'SH 2024 h2 social [7384,36921]');
+assert(sh24.h2.housing_base[1] === 36921, 'SH 2024 h2 housing upper 36921');
+
+// Spot checks for the other 7 cities on 2023/2024 H1 lower bounds.
+assert(CFG.cities.beijing.years['2023'].h1.social_base[0] === 5869, 'BJ 2023 h1 lower 5869');
+assert(CFG.cities.beijing.years['2024'].h2.social_base[1] === 35283, 'BJ 2024 h2 upper 35283');
+assert(CFG.cities.guangzhou.years['2023'].h1.social_base[0] === 4588, 'GZ 2023 h1 lower 4588');
+assert(CFG.cities.hangzhou.years['2023'].h1.social_base[1] === 22311, 'HZ 2023 h1 upper 22311');
+assert(CFG.cities.nanjing.years['2024'].h1.social_base[0] === 4879, 'NJ 2024 h1 lower 4879');
+assert(CFG.cities.hefei.years['2024'].h2.social_base[1] === 21133, 'HF 2024 h2 upper 21133');
+assert(CFG.cities.wuhu.years['2023'].h1.housing_base[0] === 1930, 'WH 2023 h1 housing lower 1930');
+
+// Shenzhen 2023/2024: pension/unemployment follow the social-insurance year (from July),
+// while medical follows the CALENDAR year per 深圳市医保局 notices.
+const sz24 = CFG.cities.shenzhen.years['2024'];
+assert(sz24.h1.social_base.pension[1] === 26421, 'SZ 2024 h1 pension upper 26421');
+assert(sz24.h2.social_base.pension[0] === 3523, 'SZ 2024 h2 pension lower 3523');
+assert(sz24.h1.social_base.medical[0] === 6475 && sz24.h1.social_base.medical[1] === 32376, 'SZ 2024 h1 medical [6475,32376]');
+assert(sz24.h2.social_base.medical[0] === 6475 && sz24.h2.social_base.medical[1] === 32376, 'SZ 2024 h2 medical stays [6475,32376]');
+const sz23 = CFG.cities.shenzhen.years['2023'];
+assert(sz23.h1.social_base.medical[0] === 7778 && sz23.h2.social_base.medical[1] === 38892, 'SZ 2023 medical [7778,38892] both halves');
+
+// 深圳医保自然年度口径：2025 全年 6733/33666（官方 2024-12-27 公告），不得沿用 2024 值
+const sz25 = CFG.cities.shenzhen.years['2025'];
+assert(sz25.h1.social_base.medical[0] === 6733 && sz25.h1.social_base.medical[1] === 33666, 'SZ 2025 h1 medical [6733,33666]');
+assert(sz25.h2.social_base.medical[0] === 6733 && sz25.h2.social_base.medical[1] === 33666, 'SZ 2025 h2 medical [6733,33666]');
+assert(sz25.h1.social_base.unemployment[1] === 43659, 'SZ 2025 h1 unemployment upper 43659');
+assert(sz25.h1.housing_base[1] === 43659, 'SZ 2025 h1 housing upper 43659');
+
+// Corrections to previously lagged rows (must match income-calc / official publications)
+assert(CFG.cities.hangzhou.years['2025'].h1.social_base[1] === 24930, 'HZ 2025 h1 social upper 24930');
+assert(CFG.cities.hangzhou.years['2025'].h1.housing_base[1] === 39530, 'HZ 2025 h1 housing upper 39530');
+assert(CFG.cities.hangzhou.years['2025'].h2.housing_base[1] === 40694, 'HZ 2025 h2 housing upper 40694');
+assert(CFG.cities.hangzhou.years['2026'].h1.housing_base[1] === 40694, 'HZ 2026 h1 housing upper 40694');
+assert(CFG.cities.wuhu.years['2025'].h1.housing_base[1] === 25386, 'WH 2025 h1 housing upper 25386');
+
+// A historical year must compute end-to-end (Shanghai 2023 H1, gross 20000, fund 7%)
+// Expected M1: 五险一金 2100+1400=3500 / 个税 (20000-5000-3500)*3%=345 / 到手 16155
+console.log('\n=== Historical-year full-year computation ===');
+const sessSH23 = createSession('shanghai', 2023, CFG);
+const m23 = computeYear(sessSH23, 20000, [], 7, 0, CFG);
+assert(m23.length === 12, 'SH 2023 computes 12 months');
+assertClose(m23[0].social_p_total, 3500, 0.005, 'SH 2023 M1 五险一金 = 3500');
+assertClose(m23[0].month_tax, 345, 0.005, 'SH 2023 M1 个税 = 345');
+assertClose(m23[0].net, 16155, 0.005, 'SH 2023 M1 到手 = 16155');
+// H1/H2 of 2023 use different bounds (6520/34188 vs 7310/36549), and M7 has already
+// crossed the 36000 cumulative threshold so it falls into the 10% bracket.
+const [h1lo, h1hi] = sessSH23.socialBounds(1);
+const [h2lo, h2hi] = sessSH23.socialBounds(7);
+assert(h1lo === 6520 && h1hi === 34188, 'SH 2023 H1 bounds 6520/34188');
+assert(h2lo === 7310 && h2hi === 36549, 'SH 2023 H2 bounds 7310/36549');
+assertClose(m23[6].month_tax, 1150, 0.005, 'SH 2023 M7 个税 = 1150（累计预扣跨入 10% 档）');
+assertClose(m23[6].net, 15350, 0.005, 'SH 2023 M7 到手 = 15350');
 
 // =====================================================================
 // Summary

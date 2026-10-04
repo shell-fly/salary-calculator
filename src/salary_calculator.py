@@ -727,9 +727,9 @@ def export_xlsx(sess, months_12, path=None):
 
 def main():
     print("=" * 68)
-    print("  China Salary Calculator（中国大陆 · 8 城市 · 多年度 · 半年度）")
+    print("  工资计算器（中国） · 8 城市 · 多年度 · 半年度")
     print(f"  默认城市：{CFG['cities'][DEFAULT_CITY]['name']}  默认年度：{DEFAULT_YEAR}")
-    print("  数据来源：config.json（8 城市 2025/2026 两年上半年+下半年基数）")
+    print(f"  数据来源：config.json（{len(CFG['cities'])} 城市 · 年度 {min(int(k) for k in CFG['cities'][DEFAULT_CITY]['years'])}-{max(int(k) for k in CFG['cities'][DEFAULT_CITY]['years'])} · 含上/下半年基数）")
     print("=" * 68)
 
     city_code = choose_city()
