@@ -9,7 +9,7 @@ set "TARGET=%~1"
 if "%TARGET%"=="" set "TARGET=both"
 
 echo ===============================================
-echo  China Salary Calculator — Pages 部署检查
+echo  工资计算器（中国） — Pages 部署检查
 echo ===============================================
 
 echo [1/4] 校验 Web UI / PWA 文件...

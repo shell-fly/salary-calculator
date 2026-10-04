@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 cd "$(dirname "$0")"
 echo "==============================="
-echo " China Salary Calculator"
+echo " 工资计算器（中国）"
 echo "==============================="
 echo "[1] CLI 命令行版"
 echo "[2] Web UI（浏览器打开）"
