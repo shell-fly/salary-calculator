@@ -78,7 +78,10 @@ python3 src/salary_calculator.py
 
 所有参数集中在根目录 [`config.json`](config.json)（CLI 与 Web UI 共用同一份数据）：
 
-- `cities`：8 城市逐年、逐半年度的社保/公积金基数上下限与费率；`_sources` 标注官方来源。
+- `cities`：8 城市逐年、逐半年度的社保/公积金基数上下限与费率；`_sources` 标注官方来源与**公告日**（`verified_on` 即该行对应的公告日，未核实时为对齐日期）。
+- 自然年度省份（浙江 / 江苏 / 安徽）同一年度的上、下半年社保基数相同；广东按 7 月社保年度；深圳与广州的医保另按自然年度单列。
+- Each calendar-year province (Zhejiang / Jiangsu / Anhui) keeps the same social-insurance bounds in both
+  halves of a year; Guangdong switches in July, and Shenzhen/Guangzhou medical switch in January.
 - `tax_brackets` / `bonus_brackets`：个税年度 7 级税率表、年终奖月度换算税率表。
 - `special_deductions`：子女教育、继续教育、大病医疗、住房贷款利息、住房租金、赡养老人、3 岁以下婴幼儿照护。
 
@@ -113,7 +116,7 @@ china-salary-calculator/
 ├── web/
 │   ├── index.html              # Web UI 单文件（内嵌 Vue 3 + 计算引擎 + 配置）
 │   ├── compute.js              # 计算引擎 JS 源（开发参考）
-│   ├── test-compute.js         # Node.js 等价性测试（191 条断言）
+│   ├── test-compute.js         # Node.js 等价性测试（277 条断言）
 │   ├── inline-vue.mjs          # 构建脚本：把 Vue 运行时内联进 index.html
 │   ├── inline-config.mjs       # 构建脚本：把 config.json 重新内联回 index.html
 │   ├── manifest.webmanifest    # PWA 安装清单
@@ -134,7 +137,7 @@ china-salary-calculator/
 
 ```bash
 cd web
-node test-compute.js     # 191 条断言，验证与 Python 结果一致
+node test-compute.js     # 277 条断言，验证与 Python 结果一致
 ```
 
 The JS engine is numerically equivalent to the Python CLI; run the Node regression above.
