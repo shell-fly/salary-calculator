@@ -52,9 +52,9 @@ Open `web/index.html` directly in any browser — **nothing to install**.
 | Android | 把 `web/index.html` 传到手机，用 Chrome 打开（或 Termux 内 `bash run.sh`） |
 | iPhone / iPad | 通过 AirDrop / 文件 App / iCloud 传输后用 Safari 打开 |
 
-- 单文件自包含（约 223 KB），**离线可用**；参数改动实时刷新所有结果。
+- 单文件自包含（约 224 KB），**离线可用**；参数改动实时刷新所有结果。
 - 想更新城市/年度数据：点击页面「导入配置」选择外部 `config.json` 覆盖内嵌默认值。
-- Self-contained single file (~223 KB), **works offline**; results update in real time as you edit inputs.
+- Self-contained single file (~224 KB), **works offline**; results update in real time as you edit inputs.
 - To update city/year data: click "导入配置 / Import" and select an external `config.json`.
 
 ### 方式二：CLI（需 Python 3）/ Option 2: CLI (requires Python 3)
@@ -86,7 +86,7 @@ python3 src/salary_calculator.py
 **新增年度**：在对应城市 `years` 下追加 `"2027": { "verified_on": "...", "h1": {...}, "h2": {...} }`。
 
 深圳的养老/医疗/失业三险基数区间不同，使用对象格式分别指定；其余城市用简写 `[lo, hi]`。
-深圳**医保按自然年度**调整（非 7 月切换），故同年度上下半年区间相同。
+深圳与广州的**医保按自然年度**调整（非 7 月切换），且上下限与职保不同，故这两城单独指定 `medical` 区间，同年度上下半年相同。
 
 ⚠️ 改完 `config.json` 后，Web UI 内嵌的那一份需要重新内联才能生效：
 
@@ -98,8 +98,8 @@ node web/inline-config.mjs   # 把 config.json 写回 index.html 并校验一致
 
 All parameters live in root [`config.json`](config.json), shared by CLI and Web UI. Add a city by
 appending a block under `cities`; add a year under that city's `years`. Shenzhen uses per-insurance
-base ranges (object form), and its **medical** base follows the calendar year (same range in both
-halves); other cities use the shared `[lo, hi]` shorthand.
+base ranges (object form), and the **medical** base in both Shenzhen and Guangzhou follows the calendar
+year (same range in both halves); other cities use the shared `[lo, hi]` shorthand.
 After editing `config.json`, run `node web/inline-config.mjs` to refresh the copy embedded in
 `index.html` (or use the in-page "导入配置 / Import" button for a temporary override).
 
@@ -113,7 +113,7 @@ china-salary-calculator/
 ├── web/
 │   ├── index.html              # Web UI 单文件（内嵌 Vue 3 + 计算引擎 + 配置）
 │   ├── compute.js              # 计算引擎 JS 源（开发参考）
-│   ├── test-compute.js         # Node.js 等价性测试（157 条断言）
+│   ├── test-compute.js         # Node.js 等价性测试（191 条断言）
 │   ├── inline-vue.mjs          # 构建脚本：把 Vue 运行时内联进 index.html
 │   ├── inline-config.mjs       # 构建脚本：把 config.json 重新内联回 index.html
 │   ├── manifest.webmanifest    # PWA 安装清单
@@ -134,7 +134,7 @@ china-salary-calculator/
 
 ```bash
 cd web
-node test-compute.js     # 157 条断言，验证与 Python 结果一致
+node test-compute.js     # 191 条断言，验证与 Python 结果一致
 ```
 
 The JS engine is numerically equivalent to the Python CLI; run the Node regression above.
