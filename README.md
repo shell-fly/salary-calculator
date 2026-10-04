@@ -1,9 +1,16 @@
-# China Salary Calculator · 中国工资计算器
+# 工资计算器（中国） · China Salary Calculator
 
-> 中国大陆 **8 城市 × 多年度 × 半年度** 的五险一金 + 个人所得税 + 年终奖 + 汇算清缴计算器。
+> 正式名 / Official name：**工资计算器（中国）**（英文与代码层仓库标识沿用通用工程名 `china-salary-calculator`）
+> 定名说明 / Naming decision：[`docs/superpowers/specs/2026-10-04-product-naming-design.md`](docs/superpowers/specs/2026-10-04-product-naming-design.md)
+>
+> 定位 / Positioning：在**功能、易用性、准确性**上全面对等甚至超过 `income-calc`（详见
+> [`docs/src-vs-github-repos-comparison.md`](docs/src-vs-github-repos-comparison.md) 第十一章）。
+>
+> 中国大陆 **8 城市 × 2023–2026 四个社保年度 × 半年度** 的五险一金 + 个人所得税 + 年终奖 + 汇算清缴计算器。
 > 提供 **命令行（CLI）** 与 **跨平台单文件 Web UI** 两种形态，开箱即用、零依赖。
 >
-> A Mainland-China salary calculator covering **8 cities × multiple years × half-year periods** —
+> A Mainland-China salary calculator covering **8 cities × 4 social-insurance years (2023–2026) ×
+> half-year periods** —
 > social insurance, housing fund, individual income tax (cumulative withholding), annual bonus and
 > annual settlement. Ships in two forms: a **CLI** and a **cross-platform single-file Web UI**.
 
@@ -26,6 +33,7 @@
 - **导出**：CSV（零依赖）/ Excel（可选）。
   Export to CSV (zero-dep) / Excel (optional).
 - **8 城市 / 8 cities**：上海、北京、广州、杭州、深圳、南京、合肥、芜湖。
+- **四个社保年度 / 4 policy years**：2023–2026，每年分上半年/下半年两段基数，按月自动切换。
 
 ---
 
@@ -44,9 +52,9 @@ Open `web/index.html` directly in any browser — **nothing to install**.
 | Android | 把 `web/index.html` 传到手机，用 Chrome 打开（或 Termux 内 `bash run.sh`） |
 | iPhone / iPad | 通过 AirDrop / 文件 App / iCloud 传输后用 Safari 打开 |
 
-- 单文件自包含（约 215 KB），**离线可用**；参数改动实时刷新所有结果。
+- 单文件自包含（约 223 KB），**离线可用**；参数改动实时刷新所有结果。
 - 想更新城市/年度数据：点击页面「导入配置」选择外部 `config.json` 覆盖内嵌默认值。
-- Self-contained single file (~215 KB), **works offline**; results update in real time as you edit inputs.
+- Self-contained single file (~223 KB), **works offline**; results update in real time as you edit inputs.
 - To update city/year data: click "导入配置 / Import" and select an external `config.json`.
 
 ### 方式二：CLI（需 Python 3）/ Option 2: CLI (requires Python 3)
@@ -78,10 +86,22 @@ python3 src/salary_calculator.py
 **新增年度**：在对应城市 `years` 下追加 `"2027": { "verified_on": "...", "h1": {...}, "h2": {...} }`。
 
 深圳的养老/医疗/失业三险基数区间不同，使用对象格式分别指定；其余城市用简写 `[lo, hi]`。
+深圳**医保按自然年度**调整（非 7 月切换），故同年度上下半年区间相同。
+
+⚠️ 改完 `config.json` 后，Web UI 内嵌的那一份需要重新内联才能生效：
+
+```bash
+node web/inline-config.mjs   # 把 config.json 写回 index.html 并校验一致
+```
+
+或直接在页面点「导入配置」选择 `config.json`（临时覆盖，不修改文件）。
 
 All parameters live in root [`config.json`](config.json), shared by CLI and Web UI. Add a city by
 appending a block under `cities`; add a year under that city's `years`. Shenzhen uses per-insurance
-base ranges (object form); other cities use the shared `[lo, hi]` shorthand.
+base ranges (object form), and its **medical** base follows the calendar year (same range in both
+halves); other cities use the shared `[lo, hi]` shorthand.
+After editing `config.json`, run `node web/inline-config.mjs` to refresh the copy embedded in
+`index.html` (or use the in-page "导入配置 / Import" button for a temporary override).
 
 ---
 
@@ -93,12 +113,17 @@ china-salary-calculator/
 ├── web/
 │   ├── index.html              # Web UI 单文件（内嵌 Vue 3 + 计算引擎 + 配置）
 │   ├── compute.js              # 计算引擎 JS 源（开发参考）
-│   ├── test-compute.js         # Node.js 等价性测试（70+ 断言）
-│   └── inline-vue.mjs          # 构建脚本：把 Vue 运行时内联进 index.html
-├── config.json                 # 城市/年度/税率/专项附加参数（CLI 与 Web 共用）
+│   ├── test-compute.js         # Node.js 等价性测试（157 条断言）
+│   ├── inline-vue.mjs          # 构建脚本：把 Vue 运行时内联进 index.html
+│   ├── inline-config.mjs       # 构建脚本：把 config.json 重新内联回 index.html
+│   ├── manifest.webmanifest    # PWA 安装清单
+│   ├── sw.js                   # 离线缓存 Service Worker
+│   └── icons/                  # 应用图标（多尺寸 + maskable）
+├── config.json                 # 8 城 × 2023–2026 参数（税率/专项附加，CLI 与 Web 共用）
 ├── run.bat                     # Windows 双菜单入口（CLI / Web）
 ├── run.sh                      # macOS / Linux / Termux 双菜单入口
-└── docs/                       # 变更记录、口径比对、设计与实现文档
+├── deploy-pages.bat / .sh      # 一键发布前置检查（GitHub / Gitee Pages）
+└── docs/                       # 定名说明、变更记录、口径比对、设计与实现文档
 ```
 
 ---
@@ -109,7 +134,7 @@ china-salary-calculator/
 
 ```bash
 cd web
-node test-compute.js     # 70+ 断言，验证与 Python 结果一致
+node test-compute.js     # 157 条断言，验证与 Python 结果一致
 ```
 
 The JS engine is numerically equivalent to the Python CLI; run the Node regression above.
@@ -162,9 +187,10 @@ http(s); opening `index.html` via `file://` still works as a full offline single
 
 ## 📚 文档 / Docs
 
+- [`docs/superpowers/specs/2026-10-04-product-naming-design.md`](docs/superpowers/specs/2026-10-04-product-naming-design.md) — 正式定名与文档口径 / product naming decision
 - [`docs/upgrade-changelog.md`](docs/upgrade-changelog.md) — v1→v2→v3 升级变更说明 / changelog
 - [`docs/salary-calculator-calibration-report.md`](docs/salary-calculator-calibration-report.md) — 与 GitHub 开源项目口径比对 / calibration report
-- [`docs/src-vs-github-repos-comparison.md`](docs/src-vs-github-repos-comparison.md) — 详细代码对比 / detailed comparison
+- [`docs/src-vs-github-repos-comparison.md`](docs/src-vs-github-repos-comparison.md) — 详细代码对比，含对 `income-calc` 的功能/易用性/准确性对等与超越总评 / detailed comparison incl. parity & superiority vs `income-calc`
 
 ---
 

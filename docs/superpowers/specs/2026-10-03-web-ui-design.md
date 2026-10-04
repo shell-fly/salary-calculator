@@ -1,7 +1,11 @@
 # China Salary Calculator — Web UI 设计规格
 
-> 设计日期：2026-10-03  
-> 状态：已确认  
+> 历史设计快照（保留当时的工作名原文）：项目正式名已于 2026-10-04 定为 **工资计算器（中国）**，
+> 英文与代码层仓库标识沿用通用工程名 `china-salary-calculator`；定名与展示名变更见
+> [`../../upgrade-changelog.md`](../../upgrade-changelog.md)。
+
+> 设计日期：2026-10-03
+> 状态：已确认
 > 作者：brainstorming session
 
 ## 1. 概述

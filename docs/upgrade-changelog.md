@@ -1,9 +1,11 @@
-# china-salary-calculator 升级变更说明
+# 工资计算器（中国）升级变更说明
 
-- 升级日期：2026-09-16（v1 → v2）；2026-10-04（v2 → v3）
+- 正式名：**工资计算器（中国）**；代码层仓库/目录标识：`china-salary-calculator`（沿用既有小写通用工程名，不另造品牌名；定名说明见 [`superpowers/specs/2026-10-04-product-naming-design.md`](superpowers/specs/2026-10-04-product-naming-design.md)）
+- 产品定位：在**功能、易用性、准确性**上全面对等甚至超过 `income-calc`（达成情况逐项对照见 [`src-vs-github-repos-comparison.md`](src-vs-github-repos-comparison.md) 第十一章）
+- 升级日期：2026-09-16（v1 → v2）；2026-10-04（v2 → v3）；2026-10-04（v3 同期追加 PWA 与一键部署，见 8.7）；2026-10-04（v3.1 参数表补齐 2023/2024 年度 + 口径修正，见第九章）
 - 升级前版本：v1（上海 2026 单城市单年度，`shanghai_config.json`）
 - 升级后版本：v2（8 城市 × 多年度 × 半年度 + 全套高级功能，`config.json`）
-- 最新版本：v3（在 v2 基础上新增**跨平台单文件 Web UI**，计算引擎 Python/JS 双实现，见第八章）
+- 最新版本：**v3.1**（v3 的跨平台单文件 Web UI + PWA + 一键部署；参数表扩展为 **8 城 × 2023–2026 四个社保年度** 并修正若干口径，见第八、九章）
 
 ---
 
@@ -11,15 +13,17 @@
 
 ### 1.1 多城市支持（8 城）
 
-沪 / 京 / 穗 / 杭 / 深 / 宁 / 合 / 芜（shanghai / beijing / guangzhou / hangzhou / shenzhen / nanjing / hefei / wuhu）。数据来源对齐 `income-calc` 的 `cityPolicies.ts`（已验证 2025/2026 与官方一致）。
+沪 / 京 / 穗 / 杭 / 深 / 宁 / 合 / 芜（shanghai / beijing / guangzhou / hangzhou / shenzhen / nanjing / hefei / wuhu）。数据来源对齐 `income-calc` 的 `cityPolicies.ts`（已验证 2023–2026 四个年度），并按官方公告修正个别条目（见第九章 9.1）。
 
 ### 1.2 多年度 × 半年度切换
 
-每个城市支持 2025 / 2026 两个社保年度，每年度分上半年（H1，1-6 月）与下半年（H2，7-12 月）两段基数。CLI 入口选择城市与年度后，程序按月份自动切换对应半年度的社保/公积金基数上下限。
+每个城市支持 **2023 / 2024 / 2025 / 2026 四个社保年度**（v3.1 补齐前两个），每年度分上半年（H1，1-6 月）与下半年（H2，7-12 月）两段基数。CLI 入口选择城市与年度后，程序按月份自动切换对应半年度的社保/公积金基数上下限；年度清单由 `config.json` 动态生成，新增年度无需改代码。
 
 ### 1.3 深圳 per-insurance 基数独立
 
-深圳的养老/医疗/失业三险基数区间互不相同（如 H2：养老 4775~27549、医疗 6733~33666、失业 2520~44934），config.json 使用对象格式分别指定；其余 7 城使用简写 `[lo, hi]` 共享。
+深圳的养老/医疗/失业三险基数区间互不相同（如 2026 H2：养老 4775~27549、医疗 6727~33633、失业 2520~44934），config.json 使用对象格式分别指定；其余 7 城使用简写 `[lo, hi]` 共享。
+
+另需特别注意：**深圳职工基本医疗（含生育）保险按自然年度调整基数（1 月起），不像养老/失业那样于 7 月切换**，因此其 `medical` 区间在同一年度的 H1 与 H2 取值相同（官方口径与修正详情见第九章 9.2）。
 
 ### 1.4 专项附加扣除支持起止月
 
@@ -48,7 +52,7 @@
 
 | v1 文件                                                            | v2 文件                                       | 说明                     |
 | ------------------------------------------------------------------ | --------------------------------------------- | ------------------------ |
-| `shanghai_config.json`（已备份至 `docs/config.v1.json.bak`）   | `config.json`（根目录）                     | 结构完全重构，不向下兼容 |
+| `shanghai_config.json`（仍保留在仓根目录，已不再被代码读取）   | `config.json`（根目录）                     | 结构完全重构，不向下兼容 |
 | `src/salary_calculator.py` 中 `CFG["social_base"]["lower"]` 等 | `Session` 类按 (city, year, month) 动态解析 | 旧全局常量改为会话级     |
 
 ### 新 config.json 顶层结构
@@ -168,8 +172,8 @@ pip install openpyxl   # 可选
 
 ## 七、回退
 
-- 旧版配置备份：`docs/config.v1.json.bak`（即 `shanghai_config.json`）。
-- 旧版 Python 脚本未保留（v2 已完全重写）；如需回退，可基于 `docs/config.v1.json.bak` + v1 源码重新搭建。
+- 旧版配置：v1 的单城市配置文件 `shanghai_config.json` 仍保留在仓根目录（v2 起代码不再读取它，只读 `config.json`），可直接用作回退参考。
+- 旧版 Python 脚本未保留（v2 已完全重写）；如需回退，可基于 `shanghai_config.json` + v1 源码重新搭建。
 - 任何阶段可通过 `git` 回滚。
 
 ---
@@ -184,12 +188,16 @@ v2 仅有命令行形态，无法在移动端（安卓 / iOS）与无 Python 环
 
 | 文件 | 说明 |
 |---|---|
-| `web/index.html` | **单文件 Web UI（约 215 KB）**，内嵌 Vue 3 运行时 + 全部计算逻辑 + 样式 + `config.json` 数据，离线双击/浏览器打开即用 |
+| `web/index.html` | **单文件 Web UI（约 223 KB）**，内嵌 Vue 3 运行时 + 全部计算逻辑 + 样式 + `config.json` 数据，离线双击/浏览器打开即用 |
 | `web/compute.js` | 计算引擎 JS 源（开发参考，已内联进 index.html） |
-| `web/test-compute.js` | Node.js 等价性测试（70+ 断言，验证 JS 与 Python 结果一致） |
+| `web/test-compute.js` | Node.js 等价性测试（157 条断言，验证 JS 与 Python 结果一致） |
 | `web/inline-vue.mjs` | 构建辅助脚本：把 Vue 运行时内联进 HTML（用函数式替换，规避 `$&` 注入） |
+| `web/inline-config.mjs` | 构建辅助脚本：把根 `config.json` 再内联到 `index.html` 的 `cfg-data` 区块（v3.1 新增；改完参数表后跑 `node web/inline-config.mjs`） |
+| `web/manifest.webmanifest` + `web/sw.js` + `web/icons/` | PWA 安装清单、离线缓存 Service Worker 与应用图标（v3 同期追加，见 8.7） |
 | `run.bat`（改） | Windows 双菜单：[1] CLI [2] Web UI |
 | `run.sh`（新） | macOS / Linux / Android Termux 双菜单 |
+| `deploy-pages.bat` / `deploy-pages.sh` | 一键部署前置检查（Windows / macOS、Linux） |
+| `.github/workflows/deploy-pages.yml` | 推送到 main/master 后自动发布 GitHub Pages |
 
 ### 8.3 技术选型与关键决策
 
@@ -205,7 +213,7 @@ v2 仅有命令行形态，无法在移动端（安卓 / iOS）与无 Python 环
 
 ### 8.5 验证
 
-- **单元等价性**：`web/test-compute.js` 70+ 断言全通过。
+- **单元等价性**：`web/test-compute.js` 全通过（v3 时为 70+ 断言，v3.1 已扩展至 157 条）。
 - **浏览器端到端**：实际渲染为正常 UI（非原始 JS 文本），改月薪 20000→30000 结果实时刷新，4 个 Tab 正常，控制台零报错。
 - **Python 交叉验证**：上海 / 2026 / 月薪 30000 / 公积金 7% → 第 1 月到手 **24157.50**、五险一金 **5250.00**，JS 与 Python 完全一致。
 
@@ -214,6 +222,68 @@ v2 仅有命令行形态，无法在移动端（安卓 / iOS）与无 Python 环
 - Web UI 界面为中文，与 CLI 一致，暂不做多语言。
 - Excel 导出在离线环境下不可用（需联网加载 SheetJS），此时提示改用 CSV。
 - Vue 运行时内联进单文件，更新 Vue 版本需重跑 `inline-vue.mjs` 构建。
+- ~~参数表目前覆盖 2025/2026 两个社保年度（income-calc 另存 2023/2024 历史年度），新增年度手工追加 `config.json`。~~ **已于 v3.1 补齐**：八城均覆盖 2023–2026 四个社保年度（见第九章）；新增年度仍需手工追加 `config.json`（参数不自动抓取）。
+
+### 8.7 PWA 与一键部署（v3 同期追加，2026-10-04）
+
+在单文件 Web UI 基础上追加“装成 App + 一键发布”能力，使本地 `file://` 与在线站点**双入口**均可用：
+
+- **PWA**：`web/manifest.webmanifest`（含名称/图标/主题色）+ `web/icons/`（16/32/192/512/maskable/apple-touch）+ `web/sw.js`（预缓存应用壳、导航请求 cache-first 后台刷新），手机/桌面浏览器可“添加到主屏”以独立窗口离线启动。
+- **双入口不降级**：Service Worker 仅在 `http(s)` 下注册，因此本地双击 `web/index.html`（`file://`）仍作为完整单文件离线运行，不产生控制台报错。
+- **一键部署**：`deploy-pages.bat` / `deploy-pages.sh` 做发布前自检；`.github/workflows/deploy-pages.yml` 在推送后自动发布 GitHub Pages；Gitee Pages 指向 `web` 目录。具体步骤见 README《部署 / Deploy》章节。
+- **图标生成**：`web/gen-icons.ps1` 从源图批量输出各尺寸图标。
+
+---
+
+## 九、v3.1 参数表补齐 2023/2024 与基数口径修正（2026-10-04）
+
+### 9.1 背景
+
+文档定名后复核对 `income-calc` 的对等声明时发现两点：
+
+1. **年度覆盖差距**：`config.json` 只有 2025/2026，而 `income-calc` 的 `cityPolicies.ts` 存 2023–2026 四年（当时唯一客观差距）；
+2. **已有数据存在滞后错填**：用脚本逐城逐半年度与 `cityPolicies.ts` 比对，发现 6 处不符；同时按深圳市医保局公告核实到**深圳医保基数按自然年度调整**，而 `income-calc` 与旧版本工具均错用“下半年才切换”的半年度映射。
+
+本轮按**先写失败测试→再改数据**的顺序完成（新增 67 条断言，共 157 条）。
+
+### 9.2 修正清单
+
+| 城市 | 年度/字段 | 修正前 | 修正后 | 依据 |
+|---|---|---|---|---|
+| 全国 8 城 | 2023 / 2024 全行 | 缺失 | 已录入（每城含 H1/H2 与 `verified_on`） | `income-calc` `cityPolicies.ts`（官方核实日 2026-08-29），并与上海市人社局历年对照表交叉校对 |
+| 杭州 | 2025 H1 社保上限 | 24060 | **24930** | `cityPolicies.ts`（24060 为上一期值） |
+| 杭州 | 2025 H1 公积金上限 | 38390 | **39530** | 杭州市公积金中心公告逐年口径 |
+| 杭州 | 2025 H2 / 2026 H1 公积金上限 | 39530 / 39530 | **40694 / 40694** | 杭州 2025 年度公积金上限 40694 元（官方公告） |
+| 芜湖 | 2025 H1 公积金上限 | 23460 | **25386** | `cityPolicies.ts` |
+| 深圳 | 2025 H1 医疗 | 7778~38892（错用 2023 值） | **6733~33666** | 深圳市医保局 2024-12-27 公告（2025 全年） |
+| 深圳 | 2025 H1 失业 / 公积金上限 | 41190 | **43659** | `cityPolicies.ts` |
+| 深圳 | 2026 医疗（H1/H2） | 6733~33666 | **6727~33633** | 深圳市医保局 2025-12-29 公告（2026 全年） |
+
+> 口径规则固化：深圳三险中只有**医疗（含生育）按自然年度**，因此同年度 H1 与 H2 的 `medical` 区间相同；养老/失业/公积金仍按 7 月切换的社保年度。该规则已写入 `config.json` 的 `_sources.shenzhen_medical_calendar_year` 字段。
+
+### 9.3 同时交付
+
+| 文件 | 变更 |
+|---|---|
+| `config.json` | 八城×四年（340 行）；新增 `_sources.history_2023_2024` 与 `_sources.shenzhen_medical_calendar_year` 口径说明 |
+| `web/inline-config.mjs`（新增） | 构建脚本：把根 `config.json` 再内联到 `index.html` 的 `id="cfg-data"` 区块（索引切片而非 `String.replace`，避免 `$&` 注入），并校验两边内容一致 |
+| `web/index.html` | 新增页面可见标题头（正式名 + 根据配置动态生成的年度摘要）；内嵌参数表同步为四年 |
+| `web/test-compute.js` | 新增 Test 7（67 条断言）：八城×四年存在性、2023/2024 关键基数、深圳医保自然年度口径、历史年度完整计算回归（全量共 157 条） |
+| `web/sw.js` | `VERSION` 由 `v3-pwa-1` 提升为 `v3-pwa-2`，使已安装用户能拿到新参数表 |
+| `src/salary_calculator.py` | 启动横幅的年度范围改为从 `config.json` 动态生成（没有硬编 2025/2026）；行数仍为 833 |
+
+### 9.4 验证
+
+- **先红后绿**：新增断言后首跑共 17 项 FAIL（缺 2023/2024）→ 补数据后 `node web/test-compute.js` **ALL TESTS PASSED**。
+- **逐城比对脚本**：修正前后自动 diff，仅剩 4 项与 `income-calc` 不同——均为**深圳医疗**，因为我们改用官方自然年度值而 `income-calc` 仍用旧值。
+- **Python 与 JS 双引擎一致**：上海/2023/月薪 20000/公积金 7% → M1 五险一金 3500.00、个税 345.00、到手 **16155.00**；M7 个税 1150.00、到手 **15350.00**（累计预扣跨入 10% 档），两端逐分相同。
+- **参数表一致性**：`node web/inline-config.mjs` 输出 `identical to config.json: true`；`index.html` 体积由 215 KB 增至约 223 KB。
+
+### 9.5 尚存限制（数据面）
+
+- 2023/2024 的 `verified_on` 记的是本次**对齐日期（2026-10-04）**，而非各官方公告日；参数源仍以 `income-calc` 为准，未逐个回到原公告页复核。
+- 各城 2026 H2 普遍带 `provisional: true`（沿用本期参数的临时值），待官方公告后替换。
+- 除深圳医疗外的其他城市场景（如广州/杭州医保是否也是自然年度）尚未逐一回到官方公告复核。
 
 ---
 
