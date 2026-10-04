@@ -3,7 +3,7 @@
  * a background refresh for navigations so the deployed PWA works fully offline
  * after the first visit. Bump VERSION on each release to bust stale caches.
  */
-const VERSION = 'v3-pwa-2';
+const VERSION = 'v3-pwa-3';
 const CACHE = `salary-calc-${VERSION}`;
 
 // App shell to precache. index.html is self-contained (Vue + engine + config inlined).

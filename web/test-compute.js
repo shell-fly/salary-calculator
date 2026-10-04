@@ -316,6 +316,78 @@ assertClose(m23[6].month_tax, 1150, 0.005, 'SH 2023 M7 个税 = 1150（累计预
 assertClose(m23[6].net, 15350, 0.005, 'SH 2023 M7 到手 = 15350');
 
 // =====================================================================
+// Test 8: 2026 rows verified against official notices
+// provisional semantics: true = 该半年度仍含沿用上一期的项（未全部公布）
+// =====================================================================
+console.log('\n=== 2026 official notice verification ===');
+
+// Beijing: 人力社保局 2026-08-21 通告（社保 [7270,36348]）+ 公积金中心 2026-08-24 通知（[2540,36348]）
+const bj26h2 = CFG.cities.beijing.years['2026'].h2;
+assert(bj26h2.social_base[0] === 7270 && bj26h2.social_base[1] === 36348, 'BJ 2026 h2 social [7270,36348]');
+assert(bj26h2.housing_base[0] === 2540 && bj26h2.housing_base[1] === 36348, 'BJ 2026 h2 housing [2540,36348]');
+assert(!bj26h2.provisional, 'BJ 2026 h2 fully announced (2026-08-21 / 2026-08-24)');
+assert(CFG.cities.beijing.years['2026'].verified_on === '2026-08-24', 'BJ 2026 verified_on is the announcement date');
+
+// Nanjing: 南京公积金中心 2026-07-17 通知（上限 42400 = 2025 年在岗职工月均工资 3 倍，下限 2660）
+// social: 江苏官方明确 2026 年 1 月起暂按 2025 年度标准执行 → 该半年度仍含沿用项
+const nj26h2 = CFG.cities.nanjing.years['2026'].h2;
+assert(nj26h2.housing_base[0] === 2660 && nj26h2.housing_base[1] === 42400, 'NJ 2026 h2 housing [2660,42400]');
+assert(nj26h2.provisional === true, 'NJ 2026 h2 stays provisional (Jiangsu social carried over by official notice)');
+
+// Hangzhou: 杭州公积金中心 2026-07-25 通知（上限 42151，杭州市区下限 2660，执行 2026-07-01至2027-06-30）
+const hz26h2 = CFG.cities.hangzhou.years['2026'].h2;
+assert(hz26h2.housing_base[0] === 2660 && hz26h2.housing_base[1] === 42151, 'HZ 2026 h2 housing [2660,42151]');
+assert(hz26h2.provisional === true, 'HZ 2026 h2 stays provisional (Zhejiang social year not announced)');
+// Hangzhou 2026 h1 still sits in the 2025 housing year
+assert(CFG.cities.hangzhou.years['2026'].h1.housing_base[1] === 40694, 'HZ 2026 h1 housing upper 40694 (2025 year)');
+
+// Guangzhou: 广州公积金中心 2026-07-06 通知（上限 41697，下限 2500）
+const gz26h2 = CFG.cities.guangzhou.years['2026'].h2;
+assert(gz26h2.housing_base[0] === 2500 && gz26h2.housing_base[1] === 41697, 'GZ 2026 h2 housing [2500,41697]');
+assert(CFG.cities.guangzhou.years['2026'].h2.provisional === true, 'GZ 2026 h2 stays provisional (Guangdong social year not announced)');
+
+// Anhui: 2026-09-07 五部门通知，社保基数 [4354,21772] 执行 2026 自然年度（全年统一，公布前暂按上期并补差）
+for (const code of ['hefei', 'wuhu']) {
+  for (const half of ['h1', 'h2']) {
+    const y = CFG.cities[code].years['2026'][half];
+    assert(y.social_base[0] === 4354 && y.social_base[1] === 21772, `${code} 2026 ${half} social [4354,21772] (Anhui calendar year)`);
+    assert(JSON.stringify(CFG.cities[code].years['2026'].h1.social_base) === JSON.stringify(y.social_base),
+      `${code} 2026 ${half} social identical across halves (calendar year)`);
+  }
+}
+// Hefei: 合肥公积金中心 2026-06-29 通知（上限 31564，下限 2320）——社保与公积金均已公布，可去 provisional
+const hf26h2 = CFG.cities.hefei.years['2026'].h2;
+assert(hf26h2.housing_base[0] === 2320 && hf26h2.housing_base[1] === 31564, 'HF 2026 h2 housing [2320,31564]');
+assert(!hf26h2.provisional, 'HF 2026 h2 fully announced (social 2026-09-07 + fund 2026-06-29)');
+assert(!CFG.cities.hefei.years['2026'].h1.provisional, 'HF 2026 h1 fully announced');
+// Wuhu fund 2026 upper limit not yet verified: keep the carried-over value flagged
+assert(CFG.cities.wuhu.years['2026'].h2.provisional === true, 'WH 2026 h2 stays provisional (Wuhu fund notice not verified)');
+
+// Guangzhou medical follows the calendar year (separate from the Guangdong pension cap),
+// so Guangzhou must use the per-insurance object form like Shenzhen.
+const gz26h1 = CFG.cities.guangzhou.years['2026'].h1.social_base;
+assert(gz26h1.medical && gz26h1.medical[0] === 6234 && gz26h1.medical[1] === 31170,
+  'GZ 2026 medical [6234,31170] split out as per-insurance');
+assert(gz26h1.pension[0] === 5510 && gz26h1.pension[1] === 27549, 'GZ 2026 pension [5510,27549]');
+assert(JSON.stringify(gz26h1.unemployment) === JSON.stringify(gz26h1.pension), 'GZ 2026 unemployment follows pension');
+const gz25h1 = CFG.cities.guangzhou.years['2025'].h1.social_base;
+assert(gz25h1.medical && gz25h1.medical[0] === 6236 && gz25h1.medical[1] === 31179, 'GZ 2025 medical [6236,31179]');
+assert(gz25h1.pension[0] === 5500 && gz25h1.pension[1] === 27501, 'GZ 2025 h1 pension [5500,27501]');
+// Medical stays identical across halves of the same calendar year (both 2025 and 2026)
+for (const y of ['2025', '2026']) {
+  const sb = CFG.cities.guangzhou.years[y];
+  assert(JSON.stringify(sb.h1.social_base.medical) === JSON.stringify(sb.h2.social_base.medical),
+    `GZ ${y} medical identical across halves (calendar year)`);
+}
+
+// Shenzhen medical calendar-year rule still holds after the Guangzhou change
+for (const y of ['2023', '2024', '2025', '2026']) {
+  const sz = CFG.cities.shenzhen.years[y];
+  assert(JSON.stringify(sz.h1.social_base.medical) === JSON.stringify(sz.h2.social_base.medical),
+    `SZ ${y} medical identical across halves (calendar year)`);
+}
+
+// =====================================================================
 // Summary
 // =====================================================================
 console.log('\n============================================');
