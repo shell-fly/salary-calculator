@@ -33,11 +33,17 @@
 
 ## 4. 产品定位（写入文档的对外口径）
 
-在**准确性、功能、易用性**三个维度全面对等甚至超过 `income-calc`（五个对比仓库中综合实力最强者）。逐项达成情况见
-[`src-vs-github-repos-comparison.md` 第十一章](../../src-vs-github-repos-comparison.md)：
+> **2026-10-04 口径调整**：本条原文要求“在准确性、功能、易用性上全面对等甚至超过
+> `income-calc`”。源码复核后发现该基线选得不对（它是一个 15★ / 0 fork / 零测试的个人项目，
+> 而品类第一名仅 37★），且据此写下的结论中有三项反向。现行口径改为：
+> **以“参数可审计的准确性 + 零安装离线可用”为主轴，`income-calc` 仅作参考基线**；
+> 依据与止损判据见 [`../../../income-calc-assessment.md`](../../../income-calc-assessment.md)。
+
+原定位逐项达成情况见
+[`src-vs-github-repos-comparison.md` 第十一章与第十五章](../../src-vs-github-repos-comparison.md)：
 
 - **准确性**：与 income-calc 并列第一，且在年终奖月度换算表口径、医保自然年度、自然年度省份的 H1 建模、2026 年度公告落实度与 Python/JS 双引擎交叉验证五项上更强；
-- **功能**：income-calc 能力集已全部对等，另多出年终奖双方案对比、二分反推税前、单位用人成本、CSV 零依赖导出、零依赖 CLI、单文件离线 Web UI + PWA + 一键部署；
+- **功能**：~~income-calc 能力集已全部对等~~ → **已校正（v3.6 源码复核）**：仍落后两项——**12 个月不等薪资录入**（对方 `salaryMode: 'monthly'`）与**医疗固定附加费 `medicalFixed`**；已对等项包括自定义申报基数（v3.6 补齐）；另多出年终奖双方案对比、二分反推税前、单位用人成本、CSV 零依赖导出、零依赖 CLI、单文件离线 Web UI + PWA + 一键部署、零依赖且离线的 styled Excel 导出（共 7 项）；
 - **易用性**：零安装、`file://` 离线直开、免构建参数更新、移动端传文件即用，明显优于需 Node/pnpm 构建或依赖部署站点的 income-calc；
 - ~~**唯一客观差距**：`config.json` 目前只有 2025/2026 两个社保年度（income-calc 另存 2023/2024），以及 Excel 导出样式丰富度，已列入待办。~~ → **年度差距已于同日 v3.1 关闭**（八城均覆盖 2023–2026），另修正了 6 处滞后错填；**v3.2 又逐城回到官方公告复核**，发现**深圳与广州医保均按自然年度**（`income-calc` 对深圳错用半年度切换、对广州直接将三险共用区间），本工具已改用官方值并在准确性上多项严格优于它（见对比文档第十一章与第十三章）。尚余差距：Excel 导出样式丰富度、广州 2023/2024 医保上下限未查到公告。
 
@@ -53,15 +59,17 @@
 
 ## 6. 验证
 
-- `python -m py_compile src/salary_calculator.py` 通过；`src/salary_calculator.py` 仍为 833 行（文档所述行数不变）。
-- `node web/test-compute.js`：全部断言通过（v3.1 后 157 → v3.2 后 191 → v3.3 后 277 → v3.4 后 316 条）。
+- `python -m py_compile src/salary_calculator.py` 通过；`src/salary_calculator.py` 行数已由 v1 时期的 833 行增长到 **905 行**（v3.5 Excel 报表层 856 行 → v3.6 申报基数 905 行），引用行数的文档均已同步。
+- `node web/test-compute.js`：全部断言通过（v3.1 后 157 → v3.2 后 191 → v3.3 后 277 → v3.4 后 316 → v3.6 后 345 条）；另有 `src/test_xlsx_writer.py` 51 条、`src/test_cli_smoke.py`（v3.6 新增）17 条，共 413 条。
 - `manifest.webmanifest` JSON 可解析，`name` = 工资计算器（中国）。
 - 浏览器端到端打开 `web/index.html`：`document.title` = 工资计算器（中国），Vue 正常渲染，控制台零消息，`file://` 下 SW 未注册且无报错；上海 2026 / 月薪 30000 / 公积金 7% → 第 1 月到手 24157.50、五险一金 5250.00，与 Python 口径一致。
 - 文本一致性扫描：docs 与界面文件中已无"中国工资计算器 / 上海工资计算器"作项目名残留（`shanghai_config.json` 内部注释与历史 spec/plan 除外）。
+- v3.5 Excel：`node web/test-compute.js` 316 条全绿；`python src/test_xlsx_writer.py` 51 条全绿（含“CLI 与网页 xlsx 字节相同：29176 = 29176”）；另用 openpyxl（装在临时目录，未污染本机环境）读回两份文件共 52 项断言全通过；本机 Excel COM 不可脚本化，**未在桌面 Excel 里亲自打开过**，需你双击确认观感；`index.html` 已无任何表格库 CDN 引用。
 
 ## 7. 后续待办
 
 1. ~~补录 2023/2024 两个社保年度到 `config.json`，以消除对 income-calc 的唯一覆盖差距~~ → **已完成**（同日 v3.1：八城 × 2023–2026，并修正 6 处滞后错填与深圳医保口径，见 changelog 第九章）；
-2. Excel 导出样式增强（或把 SheetJS 内联以支持离线导出，代价是单文件体积增大）；
+2. ~~Excel 导出样式增强（或把 SheetJS 内联以支持离线导出，代价是单文件体积增大）~~ → **已完成（v3.5）**：未引入 SheetJS，而是自研零依赖 writer（`src/xlsx_writer.py` ↔ `web/xlsx-writer.js`，报表层 `src/xlsx_report.py` ↔ `web/xlsx-report.js`），四个工作表、CLI 与网页输出逐字节相同（契约测试 51 条）；单文件从 226 KB 增至 247.8 KB。
 3. 若未来要并入「万」字辈产品家族，需重新走一次命名评估（语义覆盖、家族字辈、输入法歧义、撞名核验），本定名不预设该路径。
 4. ~~（数据面新增待办）逐一回到官方公告核实其他城市医保是否也按自然年度调整，并把 `verified_on` 换成真实公告日~~ → **已全部完成**：医保按自然年度的是广东省内（深圳、广州，已改 per-insurance）；另发现**浙江社保也是自然年度，而 `income-calc` 把杭州 H1 滞后了一年**，已修正；**8 城 × 2023–2026 共 32 行的 `verified_on` 均为可查证的官方公告日**（无对齐日期残留），2026 年度已有 7 行去除 `provisional`。仅余三项确实找不到原文的近似/待定项（广州 2023/2024 医保上下限、广东 2026.7 职保新基数、芜湖 2026 公积金上限），见对比文档 14.4。
+5. （v3.6 补录）本工具原缺“自定义社保/公积金申报基数”——那是 `income-calc` 与 `theajack/salary` 均具备的**品类基线能力**，缺失会使“单位按下限申报”场景输出错误。已于 v3.6 补齐，并顺带修掉一个从初始提交就在的 CLI `KeyError: 'm'` 崩溃（`src/test_cli_smoke.py` 为证）。同时仍落后两项：12 个月不等薪资、医疗固定附加费 `medicalFixed`。

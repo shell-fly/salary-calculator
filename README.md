@@ -3,8 +3,10 @@
 > 正式名 / Official name：**工资计算器（中国）**（英文与代码层仓库标识沿用通用工程名 `china-salary-calculator`）
 > 定名说明 / Naming decision：[`docs/superpowers/specs/2026-10-04-product-naming-design.md`](docs/superpowers/specs/2026-10-04-product-naming-design.md)
 >
-> 定位 / Positioning：在**功能、易用性、准确性**上全面对等甚至超过 `income-calc`（详见
-> [`docs/src-vs-github-repos-comparison.md`](docs/src-vs-github-repos-comparison.md) 第十一章）。
+> 定位 / Positioning：以**参数可审计的准确性 + 零安装离线可用**为主轴。
+> `income-calc` 仅作参考基线而非行业标杆（依据与止损判据见
+> [`income-calc-assessment.md`](income-calc-assessment.md)；逐项源码对比见
+> [`docs/src-vs-github-repos-comparison.md`](docs/src-vs-github-repos-comparison.md) 第十一、十五章）。
 >
 > 中国大陆 **8 城市 × 2023–2026 四个社保年度 × 半年度** 的五险一金 + 个人所得税 + 年终奖 + 汇算清缴计算器。
 > 提供 **命令行（CLI）** 与 **跨平台单文件 Web UI** 两种形态，开箱即用、零依赖。
@@ -20,6 +22,8 @@
 
 - **五险一金**：按城市缴费基数上下限与比例计算个人 / 单位缴纳，支持半年度自动切换。
   Five insurances + housing fund with per-city base bounds and rates, auto half-year switching.
+- **可自定义申报基数**：单位按下限申报时，社保/公积金基数可分别指定（上/下半年各一组，留空即跟随月薪，填入后仍按政策区间限幅）。
+  Declared contribution bases: many employers report the statutory lower bound instead of the real salary — override it per half-year, or leave it blank to follow the salary.
 - **个人所得税（累计预扣法）**：7 级年度税率表、5000 元起征点、专项附加扣除（可设起止月）。
   IIT via cumulative withholding — 7 brackets, ¥5000 threshold, special additional deductions with month ranges.
 - **补充公积金**：可选，城市区间约束，个人部分参与税前扣除。
@@ -30,8 +34,8 @@
   Annual settlement refund / additional-tax estimation.
 - **二分反推税前**：由目标税后到手反推应发月薪。
   Inverse calculation: derive gross from a target net.
-- **导出**：CSV（零依赖）/ Excel（可选）。
-  Export to CSV (zero-dep) / Excel (optional).
+- **导出**：CSV 与带样式的 Excel（.xlsx），**两者均零第三方依赖**。
+  CSV / styled .xlsx — both generated with no third-party library (no `openpyxl`, no CDN).
 - **8 城市 / 8 cities**：上海、北京、广州、杭州、深圳、南京、合肥、芜湖。
 - **四个社保年度 / 4 policy years**：2023–2026，每年分上半年/下半年两段基数，按月自动切换。
 
@@ -52,9 +56,10 @@ Open `web/index.html` directly in any browser — **nothing to install**.
 | Android | 把 `web/index.html` 传到手机，用 Chrome 打开（或 Termux 内 `bash run.sh`） |
 | iPhone / iPad | 通过 AirDrop / 文件 App / iCloud 传输后用 Safari 打开 |
 
-- 单文件自包含（约 224 KB），**离线可用**；参数改动实时刷新所有结果。
+- 单文件自包含（约 255 KB），**离线可用**；参数改动实时刷新所有结果，CSV / Excel 导出也完全离线完成。
 - 想更新城市/年度数据：点击页面「导入配置」选择外部 `config.json` 覆盖内嵌默认值。
-- Self-contained single file (~224 KB), **works offline**; results update in real time as you edit inputs.
+- Self-contained single file (~255 KB), **works offline**; results update in real time as you edit
+  inputs, and both the CSV and Excel exports work fully offline as well.
 - To update city/year data: click "导入配置 / Import" and select an external `config.json`.
 
 ### 方式二：CLI（需 Python 3）/ Option 2: CLI (requires Python 3)
@@ -69,8 +74,8 @@ bash run.sh        # 选 1，或：
 python3 src/salary_calculator.py
 ```
 
-按交互提示依次选择城市、年度、月薪、公积金比例、专项附加扣除等，即可查看单月明细、
-全年逐月、年终奖对比、汇算清缴、反推税前，并可选导出 CSV / Excel。
+按交互提示依次选择城市、年度、月薪、公积金比例、申报基数（默认跟随月薪）、专项附加扣除等，
+即可查看单月明细、全年逐月、年终奖对比、汇算清缴、反推税前，并可选导出 CSV / Excel。
 
 ---
 
@@ -90,6 +95,10 @@ python3 src/salary_calculator.py
 
 深圳的养老/医疗/失业三险基数区间不同，使用对象格式分别指定；其余城市用简写 `[lo, hi]`。
 深圳与广州的**医保按自然年度**调整（非 7 月切换），且上下限与职保不同，故这两城单独指定 `medical` 区间，同年度上下半年相同。
+
+⚙️ 导出无需任何第三方库：网页端不拉 CDN，命令行也不需 `pip install openpyxl`。
+改过 `web/xlsx-writer.js` 或 `web/xlsx-report.js` 后需重跑：`node web/inline-xlsx.mjs`。
+同理，改过计算引擎 `web/compute.js` 后需重跑：`node web/inline-compute.mjs`（仓内断言会拦住漂移）。
 
 ⚠️ 改完 `config.json` 后，Web UI 内嵌的那一份需要重新内联才能生效：
 
@@ -112,35 +121,49 @@ After editing `config.json`, run `node web/inline-config.mjs` to refresh the cop
 
 ```
 china-salary-calculator/
-├── src/salary_calculator.py    # CLI 版（Python 3，零依赖 + 可选 openpyxl）
+├── src/
+│   ├── salary_calculator.py      # CLI 版（Python 3 标准库，零依赖）
+│   ├── xlsx_writer.py            # 零依赖 .xlsx 写入器（表头样式/千分位/冻结/筛选）
+│   ├── xlsx_report.py            # 四表报表（与 web/xlsx-report.js 逐字对应）
+│   ├── test_xlsx_writer.py       # Excel 契约测试（含双引擎逐字节一致校验）
+│   └── test_cli_smoke.py         # CLI 端到端冒烟测试（脚本化 stdin 驱动完整 main())
 ├── web/
-│   ├── index.html              # Web UI 单文件（内嵌 Vue 3 + 计算引擎 + 配置）
-│   ├── compute.js              # 计算引擎 JS 源（开发参考）
-│   ├── test-compute.js         # Node.js 等价性测试（316 条断言）
-│   ├── inline-vue.mjs          # 构建脚本：把 Vue 运行时内联进 index.html
-│   ├── inline-config.mjs       # 构建脚本：把 config.json 重新内联回 index.html
-│   ├── manifest.webmanifest    # PWA 安装清单
-│   ├── sw.js                   # 离线缓存 Service Worker
-│   └── icons/                  # 应用图标（多尺寸 + maskable）
-├── config.json                 # 8 城 × 2023–2026 参数（税率/专项附加，CLI 与 Web 共用）
-├── run.bat                     # Windows 双菜单入口（CLI / Web）
-├── run.sh                      # macOS / Linux / Termux 双菜单入口
-├── deploy-pages.bat / .sh      # 一键发布前置检查（GitHub / Gitee Pages）
-└── docs/                       # 定名说明、变更记录、口径比对、设计与实现文档
+│   ├── index.html                # Web UI 单文件（内嵌 Vue 3 + 计算引擎 + Excel 引擎 + 配置）
+│   ├── compute.js                # 计算引擎 JS 源（开发参考）
+│   ├── xlsx-writer.js            # Excel 写入器 JS 源（与 Python 版输出一致）
+│   ├── xlsx-report.js            # 四表报表 JS 源（含 25 列定义）
+│   ├── xlsx-sample.mjs           # 跨引擎探针：node web/xlsx-sample.mjs [--report]
+│   ├── test-compute.js           # Node.js 等价性测试（345 条断言，含内联副本防漂移）
+│   ├── inline-vue.mjs            # 构建脚本：内联 Vue 运行时
+│   ├── inline-compute.mjs        # 构建脚本：将 compute.js 重新内联回 index.html
+│   ├── inline-config.mjs         # 构建脚本：将 config.json 重新内联回 index.html
+│   ├── inline-xlsx.mjs           # 构建脚本：将两个 Excel 模块重新内联回 index.html
+│   ├── manifest.webmanifest      # PWA 安装清单
+│   ├── sw.js                     # 离线缓存 Service Worker
+│   └── icons/                    # 应用图标（多尺寸 + maskable）
+├── config.json                   # 8 城 × 2023–2026 参数（税率/专项附加，CLI 与 Web 共用）
+├── run.bat                       # Windows 双菜单入口（CLI / Web）
+├── run.sh                        # macOS / Linux / Termux 双菜单入口
+├── deploy-pages.bat / .sh        # 一键发布前置检查（内联一致性 + 引擎/Excel/CLI 三套断言）
+└── docs/                         # 定名说明、变更记录、口径比对、设计与实现文档
 ```
 
 ---
 
 ## 🧪 测试 / Testing
 
-计算引擎的 JS 移植与 Python 版数值等价，可用 Node.js 回归：
+计算引擎、Excel 引擎与 CLI 入口全部可回归验证，均不需联网（以下命令均在仓根目录执行）：
 
 ```bash
-cd web
-node test-compute.js     # 316 条断言，验证与 Python 结果一致
+node web/test-compute.js            # 345 条断言：JS 与 Python 计算一致 + 内联副本未漂移
+python src/test_xlsx_writer.py      # 51 条契约断言，含“CLI 与网页 Excel 逐字节一致”
+python src/test_cli_smoke.py        # 17 条 CLI 端到端断言（驱动完整 main()，含申报基数与反推）
 ```
 
-The JS engine is numerically equivalent to the Python CLI; run the Node regression above.
+The JS engine is numerically equivalent to the Python CLI; the .xlsx writer is a byte-for-byte
+port of its Python twin, and the contract test proves both produce the same workbook bytes.
+The CLI smoke test drives the real interactive `main()` through scripted stdin, so an
+entry-level crash cannot hide behind engine-only assertions.
 
 ---
 
@@ -193,8 +216,9 @@ http(s); opening `index.html` via `file://` still works as a full offline single
 - [`docs/superpowers/specs/2026-10-04-product-naming-design.md`](docs/superpowers/specs/2026-10-04-product-naming-design.md) — 正式定名与文档口径 / product naming decision
 - [`docs/upgrade-changelog.md`](docs/upgrade-changelog.md) — v1→v2→v3 升级变更说明 / changelog
 - [`docs/salary-calculator-calibration-report.md`](docs/salary-calculator-calibration-report.md) — 与 GitHub 开源项目口径比对 / calibration report
-- [`docs/src-vs-github-repos-comparison.md`](docs/src-vs-github-repos-comparison.md) — 详细代码对比，含对 `income-calc` 的功能/易用性/准确性对等与超越总评 / detailed comparison incl. parity & superiority vs `income-calc`
+- [`docs/src-vs-github-repos-comparison.md`](docs/src-vs-github-repos-comparison.md) — 逐仓源码级对比：第十一章记分表、第十五章品类基线复核（含已校正的落后项）/ per-repo source-level comparison (scoring in ch.11, category-baseline re-audit in ch.15)
 - [`docs/gitee-repos-comparison.md`](docs/gitee-repos-comparison.md) — Gitee（码云）同类开源项目调研与生态对比 / Gitee-side landscape survey & positioning
+- [`income-calc-assessment.md`](income-calc-assessment.md) — `income-calc` 优劣势与商业价值评估（含“为何不应继续以它作对标 KPI”的依据与止损判据）/ benchmark & commercial-value assessment
 
 ---
 

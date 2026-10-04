@@ -1,11 +1,11 @@
 # 工资计算器（中国）升级变更说明
 
 - 正式名：**工资计算器（中国）**；代码层仓库/目录标识：`china-salary-calculator`（沿用既有小写通用工程名，不另造品牌名；定名说明见 [`superpowers/specs/2026-10-04-product-naming-design.md`](superpowers/specs/2026-10-04-product-naming-design.md)）
-- 产品定位：在**功能、易用性、准确性**上全面对等甚至超过 `income-calc`（达成情况逐项对照见 [`src-vs-github-repos-comparison.md`](src-vs-github-repos-comparison.md) 第十一章）
-- 升级日期：2026-09-16（v1 → v2）；2026-10-04（v2 → v3）；2026-10-04（v3 同期追加 PWA 与一键部署，见 8.7）；2026-10-04（v3.1 参数表补齐 2023/2024 年度 + 口径修正，见第九章）；2026-10-04（v3.2 逐城回到官方公告复核，见第十章）；2026-10-04（v3.3 `verified_on` 换为真实公告日 + 修正浙江自然年度滞后，见第十一章）；2026-10-04（v3.4 补齐最后三行 2025 年度公告日，见第十二章）
+- 产品定位：以**参数可审计的准确性 + 零安装离线可用**为主轴；`income-calc` 仅作参考基线（为何不应继续以它为 KPI，见 [`../income-calc-assessment.md`](../income-calc-assessment.md)；逐项对照仍保留在 [`src-vs-github-repos-comparison.md`](src-vs-github-repos-comparison.md) 第十一章，并已按 2026-10-04 源码复核算正三处反向口径）
+- 升级日期：2026-09-16（v1 → v2）；2026-10-04（v2 → v3）；2026-10-04（v3 同期追加 PWA 与一键部署，见 8.7）；2026-10-04（v3.1 参数表补齐 2023/2024 年度 + 口径修正，见第九章）；2026-10-04（v3.2 逐城回到官方公告复核，见第十章）；2026-10-04（v3.3 `verified_on` 换为真实公告日 + 修正浙江自然年度滞后，见第十一章）；2026-10-04（v3.4 补齐最后三行 2025 年度公告日，见第十二章）；2026-10-04（v3.5 Excel 导出去第三方依赖 + 双引擎逐字节一致，见第十三章）；2026-10-04（v3.6 申报基数可自定义 + CLI 崩溃缺陷修复，见第十四章）
 - 升级前版本：v1（上海 2026 单城市单年度，`shanghai_config.json`）
 - 升级后版本：v2（8 城市 × 多年度 × 半年度 + 全套高级功能，`config.json`）
-- 最新版本：**v3.4**（v3 的跨平台单文件 Web UI + PWA + 一键部署；参数表 **8 城 × 2023–2026 全部 32 行均为可查证的官方公告日**，见第八～十二章）
+- 最新版本：**v3.6**（v3 的跨平台单文件 Web UI + PWA + 一键部署；参数表 **8 城 × 2023–2026 全 32 行为官方公告日**；CSV/Excel 导出全部零依赖；**支持自定义社保/公积金申报基数**，见第八～十四章）
 
 ---
 
@@ -115,10 +115,10 @@
 ## 三、依赖
 
 - **必需**：Python 3 标准库（os / sys / json / math / csv / datetime）—— 零外部依赖。
-- **可选**：`openpyxl`（用于 Excel 导出；未安装时自动回退到 CSV）。
+- ~~**可选**：`openpyxl`（用于 Excel 导出；未安装时自动回退到 CSV）。~~ **v3.5 起不再需要**：Excel 由仓内 `src/xlsx_writer.py` 直接生成，与网页端导出字节一致。
 
 ```bash
-pip install openpyxl   # 可选
+# 已无需安装任何包；以前是 pip install openpyxl（可选）
 ```
 
 ---
@@ -188,15 +188,22 @@ v2 仅有命令行形态，无法在移动端（安卓 / iOS）与无 Python 环
 
 | 文件 | 说明 |
 |---|---|
-| `web/index.html` | **单文件 Web UI（约 226 KB）**，内嵌 Vue 3 运行时 + 全部计算逻辑 + 样式 + `config.json` 数据，离线双击/浏览器打开即用 |
+| `web/index.html` | **单文件 Web UI（约 255 KB）**，内嵌 Vue 3 运行时 + 全部计算逻辑 + Excel 引擎 + 样式 + `config.json` 数据，离线双击/浏览器打开即用，导出也不需联网 |
 | `web/compute.js` | 计算引擎 JS 源（开发参考，已内联进 index.html） |
-| `web/test-compute.js` | Node.js 等价性测试（316 条断言，验证 JS 与 Python 结果一致） |
+| `src/xlsx_writer.py` ↔ `web/xlsx-writer.js` | **v3.5 新增**：零依赖 .xlsx 写入器（STORE-zip + OOXML + 手写 CRC32），两端输出逐字节一致 |
+| `src/xlsx_report.py` ↔ `web/xlsx-report.js` | **v3.5 新增**：四表报表（年度汇总/逐月明细/政策参数/年终奖对比）与 25 列定义 |
+| `src/test_xlsx_writer.py` | **v3.5 新增**：Excel 契约测试 51 条（包结构、样式、双引擎字节相同、内嵌副本未漂移） |
+| `src/test_cli_smoke.py` | **v3.6 新增**：CLI 端到端冒烟测试 17 条（脚本化 stdin 跑完整 `main()`，覆盖申报基数与反推路径） |
+| `web/xlsx-sample.mjs` | 跨引擎探针：`node web/xlsx-sample.mjs [--report]` 输出与 CLI 相同的 xlsx 字节 |
+| `web/inline-xlsx.mjs` | 构建辅助脚本：将两个 Excel 模块重新内联回 `index.html`（v3.5 新增） |
+| `web/test-compute.js` | Node.js 等价性测试（345 条断言，验证 JS 与 Python 结果一致，并含内联副本防漂移检查） |
 | `web/inline-vue.mjs` | 构建辅助脚本：把 Vue 运行时内联进 HTML（用函数式替换，规避 `$&` 注入） |
+| `web/inline-compute.mjs` | 构建辅助脚本：把计算引擎 `web/compute.js` 再内联到 `index.html` 的 `<script id="compute-engine">` 区块（v3.6 新增；改完引擎跑 `node web/inline-compute.mjs`，漂移由 `web/test-compute.js` 拦住） |
 | `web/inline-config.mjs` | 构建辅助脚本：把根 `config.json` 再内联到 `index.html` 的 `cfg-data` 区块（v3.1 新增；改完参数表后跑 `node web/inline-config.mjs`） |
 | `web/manifest.webmanifest` + `web/sw.js` + `web/icons/` | PWA 安装清单、离线缓存 Service Worker 与应用图标（v3 同期追加，见 8.7） |
 | `run.bat`（改） | Windows 双菜单：[1] CLI [2] Web UI |
 | `run.sh`（新） | macOS / Linux / Android Termux 双菜单 |
-| `deploy-pages.bat` / `deploy-pages.sh` | 一键部署前置检查（Windows / macOS、Linux） |
+| `deploy-pages.bat` / `deploy-pages.sh` | 一键部署前置检查（Windows / macOS、Linux）；v3.5 起额外校验内嵌副本一致性与 Excel 契约测试 |
 | `.github/workflows/deploy-pages.yml` | 推送到 main/master 后自动发布 GitHub Pages |
 
 ### 8.3 技术选型与关键决策
@@ -213,14 +220,14 @@ v2 仅有命令行形态，无法在移动端（安卓 / iOS）与无 Python 环
 
 ### 8.5 验证
 
-- **单元等价性**：`web/test-compute.js` 全通过（v3 时 70+ 断言 → v3.1 157 → v3.2 191 → v3.3 277 → v3.4 316 条）。
+- **单元等价性**：`web/test-compute.js` 全通过（v3 时 70+ 断言 → v3.1 157 → v3.2 191 → v3.3 277 → v3.4 316 → v3.6 345 条）；v3.5 另加 `python src/test_xlsx_writer.py` 的 51 条 Excel 契约断言；v3.6 另加 `python src/test_cli_smoke.py` 的 17 条 CLI 端到端断言（共 413 条）。
 - **浏览器端到端**：实际渲染为正常 UI（非原始 JS 文本），改月薪 20000→30000 结果实时刷新，4 个 Tab 正常，控制台零报错。
 - **Python 交叉验证**：上海 / 2026 / 月薪 30000 / 公积金 7% → 第 1 月到手 **24157.50**、五险一金 **5250.00**，JS 与 Python 完全一致。
 
 ### 8.6 已知限制（v3）
 
 - Web UI 界面为中文，与 CLI 一致，暂不做多语言。
-- Excel 导出在离线环境下不可用（需联网加载 SheetJS），此时提示改用 CSV。
+- ~~Excel 导出在离线环境下不可用（需联网加载 SheetJS），此时提示改用 CSV。~~ **已于 v3.5 关闭**：Excel 引擎已内联进单文件，离线可用，且样式不再逊于 `income-calc`（甚至多一张年终奖表）。
 - Vue 运行时内联进单文件，更新 Vue 版本需重跑 `inline-vue.mjs` 构建。
 - ~~参数表目前覆盖 2025/2026 两个社保年度（income-calc 另存 2023/2024 历史年度），新增年度手工追加 `config.json`。~~ **已于 v3.1 补齐**：八城均覆盖 2023–2026 四个社保年度（见第九章）；新增年度仍需手工追加 `config.json`（参数不自动抓取）。
 
@@ -277,7 +284,7 @@ v2 仅有命令行形态，无法在移动端（安卓 / iOS）与无 Python 环
 - **先红后绿**：新增断言后首跑共 17 项 FAIL（缺 2023/2024）→ 补数据后 `node web/test-compute.js` **ALL TESTS PASSED**。
 - **逐城比对脚本**：修正前后自动 diff，仅剩 4 项与 `income-calc` 不同——均为**深圳医疗**，因为我们改用官方自然年度值而 `income-calc` 仍用旧值。
 - **Python 与 JS 双引擎一致**：上海/2023/月薪 20000/公积金 7% → M1 五险一金 3500.00、个税 345.00、到手 **16155.00**；M7 个税 1150.00、到手 **15350.00**（累计预扣跨入 10% 档），两端逐分相同。
-- **参数表一致性**：`node web/inline-config.mjs` 输出 `identical to config.json: true`；`index.html` 体积由 215 KB 增至约 226 KB（v3.1 223 / v3.2 224 / v3.3 226 KB）。
+- **参数表一致性**：`node web/inline-config.mjs` 输出 `identical to config.json: true`；`index.html` 体积由 215 KB 增至约 248 KB（v3.1 223 / v3.2 224 / v3.5 248 KB，多出的体积就是离线 Excel 引擎）。
 
 ### 9.5 尚存限制（数据面）
 
@@ -399,6 +406,85 @@ v3.3 未能查到的上海/北京/南京 2025 年度已补齐，**32/32 行全�
 
 - 先写 Test 10（新增 39 条断言，含“8 城 × 4 年共 32 行均不得为对齐日期”的全表防回退校验）→ 首跑 **3 项 FAIL**（正是三城 2025 年度）→ 写入公告日后 **ALL TESTS PASSED（全量 316 条）**。
 - `node web/inline-config.mjs` 重新内联输出 `identical to config.json: true`；`config.json` 353 行、`index.html` 约 226 KB、`salary_calculator.py` 仍 833 行；`sw.js` 缓存版本 → `v3-pwa-5`。
+
+---
+
+## 十三、v3.5 零依赖 Excel 导出（与网页逐字节一致）
+
+v3.5 之前，Excel 是与 `income-calc` 仅剩的功能差距：网页端从 CDN 拉 SheetJS（**离线直接不可用**，只能退回 CSV，且无任何样式），CLI 端依赖可选的 `openpyxl`（本机未安装时根本导不出）。现在两端都由仓内代码生成真正的 styled .xlsx。
+
+### 13.1 实现方式（自研 writer，不引入依赖）
+
+| 层次 | Python | JavaScript |
+|---|---|---|
+| 包写入 | `src/xlsx_writer.py`（`binascii.crc32` + `struct` 手拼 STORE-zip） | `web/xlsx-writer.js`（`TextEncoder` + 查表 CRC32 + 手写小端头） |
+| 报表 | `src/xlsx_report.py` | `web/xlsx-report.js` |
+| 内联 | — | `web/inline-xlsx.mjs` → `index.html` 的 `<script id="xlsx-writer">` / `xlsx-report` |
+| 验证 | `src/test_xlsx_writer.py`（51 条）+ `web/xlsx-sample.mjs` 探针 | 同左（跨引擎对比） |
+
+两个关键设计使“字节一致”可验证：① zip 全 STORE、时间戳固定，内容决定一切；② 数字一律经 `money()` / `percent()` 格式化成字面量再写入 XML，避开两种语言默认浮点输出的差异。因此双引擎字节相同同时证明：**报表里每一个数字都与计算引擎一致**。
+
+### 13.2 报表内容（四个工作表，比 income-calc 多一个）
+
+| 表 | 内容 | 样式 |
+|---|---|---|
+| 年度汇总 | 税前、个人/单位五险一金、专项附加、大病扣除、已预扣、汇算应纳、退税/补税、应纳税所得额、实发、月均、用工成本、实际税负率 | 合并标题行、表头加粗填色、千分位、比例列 `0.0%`、冻结前 2 行、列宽 26 |
+| 逐月明细 | 25 列（与 CSV 完全同一列定义） | 表头样式、冻结首行、**自动筛选 A1:Y13**、千分位、固定列宽 |
+| 政策参数 | 上/下半年养老・医疗・失业・公积金上下限 + 个人/单位比例 + 城市允许区间 | 合并标题、冻结 2 行、比例用百分比格式 |
+| 年终奖对比 | 年终奖金额、方案 A 合计、奖金部分个税、方案 B 合计、**推荐方案**、节税金额 | 高亮行（加粗 + 淡绿填充） |
+
+色板对齐 `income-calc` 的绿系主题（表头 `EAF5F0`、标题 `DDEFE7`、高亮 `F0F8F4`、字体微软雅黑）。
+
+### 13.3 验证
+
+- 先写失败测试：`src/test_xlsx_writer.py` 首次 `import xlsx_writer` 即 `ModuleNotFoundError`（真红），逐步实现后 **51/51 全绿**；`node web/test-compute.js` 仍 **316 条全绿**。
+- **双引擎字节相同**：同一输入（上海 2023 / 月薪 20000 / 公积金 7% / 年终奖 100000）下，CLI `build_workbook()` 与 `node web/xlsx-sample.mjs --report` 输出均为 **29176 字节且完全相等**。
+- **第三方读回**：用 openpyxl（严格 OOXML 读取器，装在临时目录，**未写入本机环境**）打开两份文件，52 项读回断言全通过：sheet 个数与顺序、合并标题、`freeze_panes == A3`、`number_format == #,##0.00` / `0.0%`、表头加粗与填充色、列宽 26、`auto_filter.ref == A1:Y13`、数值 16155.00、推荐方案与节税 9610.00。
+- 诚实保留：本机 `Excel.Application` COM 自动化报“不能取得类 Workbooks 的 Open 属性”（这台机器的 Excel 不配合脚本化），所以**未能在桌面 Excel 里亲自打开一次**；目前由 zip 完整性 + 严格解析器读回代替，建议双击打开确认观感。
+- 体积与缓存：`index.html` 226 KB → **247.8 KB**（+22 KB 包含整个 Excel 引擎）；`sw.js` → `v3-pwa-6`；`salary_calculator.py` 833 → 856 行（`xlsx_writer.py` 264 / `xlsx_report.py` 146 行另计）。
+- 防漂移：`src/test_xlsx_writer.py` 会断言 `index.html` 内嵌块与 `web/xlsx-*.js` 源文件一致，并且页面**已不再引用任何 CDN 表格库**；`deploy-pages.bat` / `.sh` 发布前自动跑这两项。
+
+---
+
+## 十四、v3.6 申报基数可自定义，并修掉一个自初始提交就存在的 CLI 崩溃（2026-10-04）
+
+### 14.1 背景：一个“准确性”问题，不是功能需求
+
+[`../income-calc-assessment.md`](../income-calc-assessment.md) 第四章反向审计本工具时发现：本工具一直**隐含假设“单位按实际工资作为缴费基数申报”**。现实里大量中小单位按**下限**申报（上海 2026 社保下限 7460、公积金下限 2690），此时工具给出的数字是错的：
+
+| 场景（上海 2026、月薪 30000、公积金 7%） | 五险一金（个人） | 当月个税 | 到手现金 |
+|---|---|---|---|
+| 按实际工资 30000 申报（旧行为） | 5,250.00 | 592.50 | 24,157.50 |
+| 按下限申报（社保 7460 / 公积金 2690） | **971.30** | **720.86** | **28,307.84** |
+| 填写值超出政策区间（99999 / 50000） | 6,527.71 | 554.17 | 22,918.12（已限幅到 37302） |
+
+扣除额高估会低估应纳税所得额，使全年的“退税/补税”结论方向反转——因此必须修。引擎层 `compute_month()` 本来就接收 `social_base_dict` / `housing_base`，**无需新算法**，只把入口从 `compute_year()` 开放出来。
+
+### 14.2 语义
+
+`declared = {"social": [上半年, 下半年], "housing": [上半年, 下半年]}`，两侧相互独立可只填一边；**留空 / 0 表示跟随月薪**（旧行为完全不变）；填写后仍取政策区间限幅，且**雇主侧与个人侧共用同一申报基数**（单位成本随之变化）。上半年与下半年可分别填写，与 `income-calc` 的 `socialBases[H1,H2]` / theajack 的 `insuranceAndFundBase` 语义对等。
+
+- CLI：新增一步提问“是否改为单位实际申报的基数？（默认 n）”，勾选后依次问四个基数（默认值自动沿用上半年）；【缴费基数核对】行会标明“按税前月薪 / 按单位申报基数”，超出区间时附“（超出政策区间，已按上下限取限）”。
+- Web UI：参数区新增“自定义申报基数”复选框 + 四个输入框，并在下方实时提示当前城市/年度的政策区间（由 `baseRanges` 计算属性从参数表生成，不写死）；计算、汇算、反推与导出均使用同一入口。
+
+### 14.3 顺带修掉的两个真问题
+
+1. 🔴 **CLI 自初始提交就会崩溃**：【缴费基数核对】那行写的是 `fmt(sb['m'])` / `fmt(sb['u'])`，而字典键是 `pension`/`medical`/`unemployment` → `KeyError: 'm'`。`git log -S` 定位到它来自 `bd40a77 chore: initial commit`，即 `run.bat` 的 CLI 选项一进入就死。实测证据：把 `git show HEAD:src/salary_calculator.py` 回跑管道输入得到 `exit code: 1` + `KeyError: 'm'`；修复后同样输入 `exit=0`。**为什么之前没发现**：当时已有的 367 条断言（引擎 316 + Excel 契约 51）全部在算引擎层，从未有人驱动 `main()`。
+2. **内联引擎无防漂移措施**：`index.html` 里内联的计算引擎与 `web/compute.js` 此前靠人工同步（旧版一次性比对过 9718 字符，但无仓内拦截）。新增 `web/inline-compute.mjs`（沿用 `inline-xlsx.mjs` 的切片写入，避开 `String.replace` 的 `$&` 陷阱）+ `web/test-compute.js` 的逐字比对断言，内联区块统一为 `<script id="compute-engine">`；`deploy-pages.bat` / `.sh` 现在会跑 inline-compute + 345 条引擎断言 + 17 条 CLI 冒烟。
+
+### 14.4 验证（先红后绿）
+
+- 先写失败测试：`web/test-compute.js` 新增 Test 11（申报基数 23 条）+ Test 12（内联防漂移 + 输入框 `step` 守卫），首跑 **16 项 FAIL** → 实现后 **ALL TESTS PASSED（全量 345 条）**。
+- 双引擎交叉：`_tmp` 探针脚本对 8 组场景（含只填公积金、填 0、超上限、北京/杭州/深圳跨城）逐行比对 Python 与 JS 的基数/五险一金/个税/到手，**16 行 0 差异**（探针已删除，同口径场景已固化进 `src/test_cli_smoke.py`）。
+- CLI 端到端：新增 `src/test_cli_smoke.py`，**17 条全通过**（三种场景 exit=0、无 Traceback，数字与 JS 完全一致）；`python -m py_compile` 通过。
+- 浏览器端到端（`file://`）：勾选“自定义申报基数”后四个输入框出现且区间提示实时正确（上海 2026：上半年社保 7460~37302、公积金 2690~37302；下半年 7546~37731 / 2740~37731）；填 7460/2690 后第 1 月实测 **971.30 / 28307.84**，取消勾选回到 **5250.00 / 24157.50**；控制台零消息、无外部网络请求。
+- 本轮浏览器验证又发现并修掉一个真问题：四个输入框原本的 `step="100"` 会让 7460/2690 这类**政策下限值触发原生 HTML5 校验失败**（`checkValidity()=false`），已改为 `step="1"` 并写入断言守卫。
+- 体积与缓存：`index.html` 248 KB → **255.2 KB**；`salary_calculator.py` 856 → **905 行**（新增 `declared_base()` 与 CLI 提问）；`compute.js` 401 → **416 行**；`sw.js` → **`v3-pwa-7`**。
+
+### 14.5 尚未做（不在本轮范围）
+
+- 12 个月不等薪资录入、医疗固定附加费（`medicalFixed`）——两项是真实落后，但不改变结论正确性，按评估报告第七章的止损判据待定。
+- 导出报表（Excel/CSV）仍只呈现引擎算出的实际基数列，未单独开一列标注“该基数为用户申报值”。
 
 ---
 
