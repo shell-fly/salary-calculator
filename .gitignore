@@ -1,0 +1,16 @@
+# Python bytecode cache
+__pycache__/
+*.py[cod]
+
+# Node modules (dev only)
+node_modules/
+
+# Exported result files
+salary_detail_*.csv
+salary_detail_*.xlsx
+
+# Editor / OS
+.vscode/
+.idea/
+Thumbs.db
+.DS_Store
