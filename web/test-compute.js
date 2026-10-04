@@ -264,11 +264,12 @@ assert(sh24.h1.social_base[0] === 7310 && sh24.h1.social_base[1] === 36549, 'SH 
 assert(sh24.h2.social_base[0] === 7384 && sh24.h2.social_base[1] === 36921, 'SH 2024 h2 social [7384,36921]');
 assert(sh24.h2.housing_base[1] === 36921, 'SH 2024 h2 housing upper 36921');
 
+// v3.1 补齐历史年度时的关键基数（部分断言已在 v3.3 按自然年度口径修正）
 // Spot checks for the other 7 cities on 2023/2024 H1 lower bounds.
 assert(CFG.cities.beijing.years['2023'].h1.social_base[0] === 5869, 'BJ 2023 h1 lower 5869');
 assert(CFG.cities.beijing.years['2024'].h2.social_base[1] === 35283, 'BJ 2024 h2 upper 35283');
 assert(CFG.cities.guangzhou.years['2023'].h1.social_base[0] === 4588, 'GZ 2023 h1 lower 4588');
-assert(CFG.cities.hangzhou.years['2023'].h1.social_base[1] === 22311, 'HZ 2023 h1 upper 22311');
+assert(CFG.cities.hangzhou.years['2023'].h1.social_base[1] === 24060, 'HZ 2023 h1 upper 24060 (calendar year, not the 2022 lagged 22311)');
 assert(CFG.cities.nanjing.years['2024'].h1.social_base[0] === 4879, 'NJ 2024 h1 lower 4879');
 assert(CFG.cities.hefei.years['2024'].h2.social_base[1] === 21133, 'HF 2024 h2 upper 21133');
 assert(CFG.cities.wuhu.years['2023'].h1.housing_base[0] === 1930, 'WH 2023 h1 housing lower 1930');
@@ -291,7 +292,7 @@ assert(sz25.h1.social_base.unemployment[1] === 43659, 'SZ 2025 h1 unemployment u
 assert(sz25.h1.housing_base[1] === 43659, 'SZ 2025 h1 housing upper 43659');
 
 // Corrections to previously lagged rows (must match income-calc / official publications)
-assert(CFG.cities.hangzhou.years['2025'].h1.social_base[1] === 24930, 'HZ 2025 h1 social upper 24930');
+assert(CFG.cities.hangzhou.years['2025'].h1.social_base[1] === 25299, 'HZ 2025 h1 social upper 25299 (v3.3: H1 no longer lags one year)');
 assert(CFG.cities.hangzhou.years['2025'].h1.housing_base[1] === 39530, 'HZ 2025 h1 housing upper 39530');
 assert(CFG.cities.hangzhou.years['2025'].h2.housing_base[1] === 40694, 'HZ 2025 h2 housing upper 40694');
 assert(CFG.cities.hangzhou.years['2026'].h1.housing_base[1] === 40694, 'HZ 2026 h1 housing upper 40694');
@@ -386,6 +387,57 @@ for (const y of ['2023', '2024', '2025', '2026']) {
   assert(JSON.stringify(sz.h1.social_base.medical) === JSON.stringify(sz.h2.social_base.medical),
     `SZ ${y} medical identical across halves (calendar year)`);
 }
+
+// =====================================================================
+// Test 9: verified_on must be the real announcement date, and calendar-year
+// provinces must not lag H1 by one period (Zhejiang finding)
+// =====================================================================
+console.log('\n=== Announcement dates and calendar-year halves ===');
+
+const ANNOUNCED = {
+  shanghai:  { '2023': '2023-06-28', '2024': '2024-07-31' },
+  beijing:   { '2023': '2023-07-25', '2024': '2024-07-31' },
+  guangzhou: { '2023': '2023-06-29', '2024': '2024-12-15', '2025': '2025-10-24' },
+  shenzhen:  { '2023': '2023-06-29', '2024': '2024-12-15', '2025': '2025-10-24' },
+  hangzhou:  { '2023': '2023-12-13', '2024': '2024-10-11', '2025': '2025-09-17' },
+  nanjing:   { '2023': '2023-01-09', '2024': '2024-09-30' },
+  hefei:     { '2023': '2023-08-17', '2024': '2024-08-21', '2025': '2025-09-19' },
+  wuhu:      { '2023': '2023-08-17', '2024': '2024-08-21', '2025': '2025-09-19' },
+};
+for (const [code, years] of Object.entries(ANNOUNCED)) {
+  for (const [year, date] of Object.entries(years)) {
+    const row = CFG.cities[code].years[year];
+    assert(!!row, `${code} has year ${year}`);
+    assert(row.verified_on === date, `${code} ${year} verified_on = ${date} (announcement date)`);
+    assert(row.verified_on !== '2026-10-04', `${code} ${year} verified_on is not the bare alignment date`);
+  }
+}
+
+// Zhejiang / Jiangsu / Anhui set the province-wide base for the whole CALENDAR year, so the
+// social-insurance bounds must be identical in H1 and H2 (income-calc lagged Hangzhou H1 by one year).
+for (const code of ['hangzhou', 'nanjing', 'hefei', 'wuhu']) {
+  for (const year of ['2023', '2024', '2025', '2026']) {
+    const y = CFG.cities[code].years[year];
+    assert(JSON.stringify(y.h1.social_base) === JSON.stringify(y.h2.social_base),
+      `${code} ${year} social bounds equal in both halves (calendar-year province)`);
+  }
+}
+// Hangzhou concrete values
+assert(JSON.stringify(CFG.cities.hangzhou.years['2023'].h1.social_base) === '[4462,24060]', 'HZ 2023 h1 social [4462,24060]');
+assert(JSON.stringify(CFG.cities.hangzhou.years['2024'].h1.social_base) === '[4812,24930]', 'HZ 2024 h1 social [4812,24930]');
+assert(JSON.stringify(CFG.cities.hangzhou.years['2025'].h1.social_base) === '[4986,25299]', 'HZ 2025 h1 social [4986,25299]');
+// Housing fund stays on the July year for these provinces, so H1 legitimately keeps the previous year
+assert(CFG.cities.hangzhou.years['2025'].h1.housing_base[1] === 39530, 'HZ 2025 h1 housing stays on the 2024 fund year');
+assert(CFG.cities.hangzhou.years['2025'].h2.housing_base[1] === 40694, 'HZ 2025 h2 housing upper 40694');
+
+// Guangdong keeps the July social-insurance year, so H1 and H2 legitimately differ there
+// (Guangzhou 2023/2024 still use the shared array form; 2025+ use the per-insurance object)
+assert(JSON.stringify(CFG.cities.guangzhou.years['2023'].h1.social_base)
+  !== JSON.stringify(CFG.cities.guangzhou.years['2023'].h2.social_base),
+  'GZ 2023 bounds differ across halves (Guangdong July year)');
+assert(JSON.stringify(CFG.cities.guangzhou.years['2024'].h1.social_base)
+  !== JSON.stringify(CFG.cities.guangzhou.years['2024'].h2.social_base),
+  'GZ 2024 bounds differ across halves (Guangdong July year)');
 
 // =====================================================================
 // Summary
