@@ -252,3 +252,11 @@ http(s); opening `index.html` via `file://` still works as a full offline single
 For demonstration only. Authoritative figures are those published by the tax and social-security
 authorizations. Calculations assume a constant monthly salary; the separate bonus-taxation policy
 runs through **2027-12-31**.
+
+---
+
+## 📄 许可证 / License
+
+本项目采用 **Apache License 2.0** 开源协议，完整条款见 [`LICENSE`](LICENSE)。
+
+This project is licensed under the **Apache License 2.0** — see [`LICENSE`](LICENSE) for the full text.
