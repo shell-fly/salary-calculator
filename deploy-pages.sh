@@ -5,6 +5,7 @@
 #   bash deploy-pages.sh check                    只跑门禁([1/5]-[3/5]),不提交不推送,无副作用(脏工作树也可跑)
 #   bash deploy-pages.sh publish [both|gitee|github]   跑门禁后直接推送(免交互,供 CI 使用)
 #   bash deploy-pages.sh gitee|github|both         等价于 publish <target>(向后兼容)
+#   任何模式都可附加 --require-node(位置不限):缺 node 时门禁硬失败,而不是跳过内联一致性校验。
 # 本脚本不会替你提交:发布前工作树必须干净,提交信息请自己按 Conventional Commits 写好。
 # 这样才不会出现一个把真实变更抹平的 "chore(deploy): update Web UI / PWA assets" 大提交。
 set -euo pipefail
@@ -12,12 +13,27 @@ cd "$(dirname "$0")"
 
 MODE=interactive
 TARGET=both
-USAGE="用法: bash deploy-pages.sh [check|publish [both|gitee|github]|gitee|github|both]"
-case "${1:-}" in
+REQUIRE_NODE=0
+ARG1=""
+ARG2=""
+_n=0
+# 先剥离选项参数(--require-node,位置不限),余下的按位置当作模式/远程名参与解析。
+for _arg in "$@"; do
+  case "$_arg" in
+    --require-node ) REQUIRE_NODE=1 ;;
+    * )
+      _n=$((_n+1))
+      if [ "$_n" = 1 ]; then ARG1="$_arg"
+      elif [ "$_n" = 2 ]; then ARG2="$_arg"
+      fi ;;
+  esac
+done
+USAGE="用法: bash deploy-pages.sh [check|publish [both|gitee|github]|gitee|github|both] [--require-node]"
+case "${ARG1:-}" in
   "" ) MODE=interactive ;;
   check|--check|-c ) MODE=check ;;
-  publish|push ) MODE=publish; TARGET="${2:-both}" ;;
-  both|gitee|github ) MODE=publish; TARGET="$1" ;;
+  publish|push ) MODE=publish; TARGET="${ARG2:-both}" ;;
+  both|gitee|github ) MODE=publish; TARGET="$ARG1" ;;
   * ) echo "$USAGE"; exit 2 ;;
 esac
 case "$TARGET" in
@@ -73,7 +89,13 @@ if command -v node >/dev/null 2>&1; then
   node web/test-compute.js >/dev/null || { echo "  ✗ 计算引擎断言未通过（详情: node web/test-compute.js）"; exit 1; }
   echo "  ✓ 计算引擎断言全部通过"
 else
+  if [ "$REQUIRE_NODE" = 1 ]; then
+    echo "  ✗ 失败: 未检测到 node,而 --require-node 要求内联一致性校验必须真实执行。"
+    echo "     请先安装 Node.js 再重跑;确要跳过请去掉 --require-node(缺 node 时本机门禁不覆盖内联一致性)。"
+    exit 1
+  fi
   echo "  ! 未检测到 node,跳过内联一致性校验。改过 config.json 或 web/*.js 后必须手动重跑内联脚本。"
+  echo "    (缺 node 时该守卫被跳过:要硬失败请加 --require-node)"
 fi
 if command -v python3 >/dev/null 2>&1; then
   python3 src/test_xlsx_writer.py >/dev/null || { echo "  ✗ xlsx 契约测试未通过"; exit 1; }

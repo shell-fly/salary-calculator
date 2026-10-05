@@ -17,3 +17,6 @@ Thumbs.db
 
 # Release packaging output
 dist/
+
+# Mimosa security scanner local audit artifacts
+.mimosa/

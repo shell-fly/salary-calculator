@@ -8,6 +8,7 @@ rem   deploy-pages.bat                    跑门禁,然后列出待推送提交�
 rem   deploy-pages.bat check              只跑门禁([1/5]-[3/5]),不提交不推送,无副作用(脏工作树也可跑)
 rem   deploy-pages.bat publish [target]   跑门禁后直接推送(免交互,供 CI 使用);target = both^|gitee^|github
 rem   deploy-pages.bat gitee / github / both   等价于 publish <target>(向后兼容)
+rem   任何模式都可附加 --require-node(位置不限):缺 node 时门禁硬失败,而不是跳过内联一致性校验。
 rem
 rem 本脚本不会替你提交:发布前工作树必须干净,提交信息请自己按 Conventional Commits 写好。
 rem 这样才不会出现一个把真实变更抹平的 "chore(deploy): update Web UI / PWA assets" 大提交。
@@ -18,8 +19,21 @@ cd /d "%~dp0"
 
 set "MODE=interactive"
 set "TARGET=both"
+set "REQUIRE_NODE="
 set "ARG1=%~1"
 set "ARG2=%~2"
+set "ARG3=%~3"
+rem 先剥离选项参数(--require-node,位置不限),余下的按位置当作模式/远程名参与解析。
+if /i "%ARG1%"=="--require-node" (
+  set "REQUIRE_NODE=1"
+  set "ARG1=%ARG2%"
+  set "ARG2=%ARG3%"
+)
+if /i "%ARG2%"=="--require-node" (
+  set "REQUIRE_NODE=1"
+  set "ARG2=%ARG3%"
+)
+if /i "%ARG3%"=="--require-node" set "REQUIRE_NODE=1"
 rem 第一个参数只表示模式或向后兼容的远程名;不能用它直接当 TARGET(否则 check 会被当成远程名而误报用法错误)。
 if /i "%ARG1%"=="check" set "MODE=check"
 if /i "%ARG1%"=="--check" set "MODE=check"
@@ -40,7 +54,7 @@ if /i "%TARGET%"=="both" set "VALID_TARGET=1"
 if /i "%TARGET%"=="gitee" set "VALID_TARGET=1"
 if /i "%TARGET%"=="github" set "VALID_TARGET=1"
 if defined VALID_TARGET goto :target_ok
-echo 用法: deploy-pages.bat [check^|publish [both^|gitee^|github]^|gitee^|github^|both]
+echo 用法: deploy-pages.bat [check^|publish [both^|gitee^|github]^|gitee^|github^|both] [--require-node]
 exit /b 2
 :target_ok
 
@@ -182,7 +196,13 @@ exit /b 0
 :check_node_suite
 where node >nul 2>&1
 if not errorlevel 1 goto :run_node_checks
+if not defined REQUIRE_NODE goto :node_skip_allowed
+echo   失败: 未检测到 node,而 --require-node 要求内联一致性校验必须真实执行。
+echo         请先安装 Node.js 再重跑;确要跳过请去掉 --require-node(缺 node 时本机门禁不覆盖内联一致性)。
+exit /b 1
+:node_skip_allowed
 echo   未检测到 node,跳过内联一致性校验。改过 config.json 或 web\*.js 后必须手动重跑内联脚本。
+echo         (缺 node 时该守卫被跳过:要硬失败请加 --require-node)
 exit /b 0
 
 :run_node_checks

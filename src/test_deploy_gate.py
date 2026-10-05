@@ -15,6 +15,10 @@ its status would have shipped anyway. These checks reproduce the pitfall (a fail
 exit non-zero), keep the new `check` mode side-effect free, and pin the .bat/.sh wording parity
 that had silently diverged (the .sh still said 345/17 after the .bat moved on).
 
+The `--require-node` cases simulate a node-less machine by stripping PATH down to the git
+toolchain + system dirs, and pin the contract the other way round: without the flag a missing
+node stays a loud skip (exit 0, says so); with it the gate must refuse to pass (exit 1).
+
 This suite is deliberately NOT wired into deploy-pages.bat/.sh: the gate would then launch
 itself recursively. Children spawned here carry DEPLOY_GATE_NO_RECURSION=1 so that if someone
 does add it later, the "run the real gate" cases downgrade to a skip instead of looping.
@@ -27,6 +31,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+from pathlib import Path
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 REPO = os.path.dirname(HERE)
@@ -240,6 +245,108 @@ if git_ok:
                   f"(got {code})")
             check("不会代为提交" in out, "and says so without committing anything")
             shutil.rmtree(workdir, ignore_errors=True)
+
+print("\n=== Optional strictness: --require-node turns the silent node skip into a hard fail ===")
+# 默认行为是"响亮跳过":没装 node 时只打印一句提示仍 exit 0,门禁的"通过"不覆盖内联一致性。
+# --require-node 必须让缺 node 硬失败,且参数位置不限(允许放在模式词之前)。
+check("--require-node" in open(BAT, encoding="utf-8", errors="replace").read()
+      and "--require-node" in open(SH, encoding="utf-8", errors="replace").read(),
+      "both entries document --require-node")
+
+
+def stub_pwa_files(workdir):
+    """[1/5] only checks existence, so empty files are enough to reach the node check.
+    Literal relative paths after chdir: the files can only land inside the temp repo."""
+    current = os.getcwd()
+    os.chdir(workdir)
+    try:
+        Path("web/icons").mkdir(parents=True, exist_ok=True)
+        Path("web/index.html").touch()
+        Path("web/manifest.webmanifest").touch()
+        Path("web/sw.js").touch()
+        Path("web/icons/icon-192.png").touch()
+        Path("web/icons/icon-512.png").touch()
+        Path("web/icons/maskable-512.png").touch()
+        Path("web/icons/apple-touch-icon.png").touch()
+    finally:
+        os.chdir(current)
+
+
+def git_root_of(exe):
+    """.../Git/bin/bash.exe or .../Git/cmd/git.exe -> .../Git (None for shim dirs)."""
+    directory = os.path.dirname(exe)
+    root, leaf = os.path.split(directory)
+    return root if leaf.lower() in ("bin", "cmd") else None
+
+
+def node_free_path(bash_exe=None):
+    """PATH without node/python (git toolchain + system dirs only), so the gate must hit
+    the no-node branch. python must be hidden too: a present python would run the real
+    suites inside the temp repo and fail them for unrelated reasons."""
+    entries = []
+    roots = []
+    if bash_exe:
+        root = git_root_of(bash_exe)
+        if root:
+            roots.append(root)
+    git_exe = shutil.which("git")
+    if git_exe:
+        root = git_root_of(git_exe)
+        if root:
+            roots.append(root)
+        entries.append(os.path.dirname(git_exe))
+    for root in roots:
+        for sub in ("bin", "cmd", "usr/bin"):
+            candidate = os.path.join(root, sub)
+            if os.path.isdir(candidate):
+                entries.append(candidate)
+    entries.append(os.path.join(os.environ.get("SystemRoot", r"C:\Windows"), "System32"))
+    return os.pathsep.join(entries)
+
+
+if os.name == "nt" and git_ok:
+    probe_path = node_free_path(find_bash())
+    probe = subprocess.run(["where", "node"], capture_output=True, text=True,
+                           env={**os.environ, "PATH": probe_path}, cwd=tempfile.gettempdir())
+    check(probe.returncode != 0, "the node-free PATH really hides node", probe.stdout[:120])
+
+    workdir = committed_temp_repo(BAT)
+    if workdir:
+        stub_pwa_files(workdir)
+        clean_path = node_free_path(find_bash())
+        code, out = run([os.path.join(workdir, "deploy-pages.bat"), "check"],
+                        cwd=workdir, extra_env={"PATH": clean_path})
+        check(code == 0, "deploy-pages.bat check still exits 0 without node (loud skip, default)",
+              f"(got {code}) {out[-200:]}")
+        check("跳过内联一致性校验" in out, "and clearly says the node suite was skipped")
+        code, out = run([os.path.join(workdir, "deploy-pages.bat"), "check", "--require-node"],
+                        cwd=workdir, extra_env={"PATH": clean_path})
+        check(code == 1, "deploy-pages.bat check --require-node exits 1 when node is absent",
+              f"(got {code}) {out[-200:]}")
+        check("未检测到 node" in out and "失败" in out, "and explains that node is required")
+        check("跳过内联一致性校验" not in out, "the skip wording is gone under the flag")
+        code, out = run([os.path.join(workdir, "deploy-pages.bat"), "--require-node", "check"],
+                        cwd=workdir, extra_env={"PATH": clean_path})
+        check(code == 1, "flag position does not matter (--require-node before the mode)",
+              f"(got {code}) {out[-200:]}")
+        shutil.rmtree(workdir, ignore_errors=True)
+
+if bash and git_ok:
+    workdir = committed_temp_repo(SH)
+    if workdir:
+        stub_pwa_files(workdir)
+        clean_path = node_free_path(bash)
+        code, out = run([bash, "deploy-pages.sh", "check"], cwd=workdir,
+                        extra_env={"PATH": clean_path})
+        check(code == 0, "deploy-pages.sh check still exits 0 without node (loud skip, default)",
+              f"(got {code}) {out[-200:]}")
+        check("跳过内联一致性校验" in out, "and clearly says the node suite was skipped")
+        code, out = run([bash, "deploy-pages.sh", "check", "--require-node"], cwd=workdir,
+                        extra_env={"PATH": clean_path})
+        check(code == 1, "deploy-pages.sh check --require-node exits 1 when node is absent",
+              f"(got {code}) {out[-200:]}")
+        check("未检测到 node" in out and "失败" in out, "and explains that node is required")
+        shutil.rmtree(workdir, ignore_errors=True)
 
 print("\n=== Positive path: check mode is a real gate and stays side-effect free ===")
 if os.environ.get("DEPLOY_GATE_NO_RECURSION_CHILD") == "1":

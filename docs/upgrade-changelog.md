@@ -2,10 +2,10 @@
 
 - 正式名：**工资计算器（中国）**；代码层仓库/目录标识：`china-salary-calculator`（沿用既有小写通用工程名，不另造品牌名；定名说明见 [`superpowers/specs/2026-10-04-product-naming-design.md`](superpowers/specs/2026-10-04-product-naming-design.md)）
 - 产品定位：以**参数可审计的准确性 + 零安装离线可用**为主轴；`income-calc` 仅作参考基线（为何不应继续以它为 KPI，见 [`../income-calc-assessment.md`](../income-calc-assessment.md)；逐项对照仍保留在 [`src-vs-github-repos-comparison.md`](src-vs-github-repos-comparison.md) 第十一章，并已按 2026-10-04 源码复核算正三处反向口径）
-- 升级日期：2026-09-16（v1 → v2）；2026-10-04（v2 → v3）；2026-10-04（v3 同期追加 PWA 与一键部署，见 8.7）；2026-10-04（v3.1 参数表补齐 2023/2024 年度 + 口径修正，见第九章）；2026-10-04（v3.2 逐城回到官方公告复核，见第十章）；2026-10-04（v3.3 `verified_on` 换为真实公告日 + 修正浙江自然年度滞后，见第十一章）；2026-10-04（v3.4 补齐最后三行 2025 年度公告日，见第十二章）；2026-10-04（v3.5 Excel 导出去第三方依赖 + 双引擎逐字节一致，见第十三章）；2026-10-04（v3.6 申报基数可自定义 + CLI 崩溃缺陷修复，见第十四章）；2026-10-05（v3.7 医疗固定附加费 `medical_fixed`，见第十五章）；2026-10-05（v3.8 支持 12 个月不等薪资，见第十六章）；2026-10-05（v3.9 发布门禁可信任化：`check` 模式 + 真实退出码 + 交付物漂移守卫，见第十七章）；2026-10-05（v3.10 发布不再代你提交：`publish` 免交互 + 确认制推送 + 脏工作树前置拦截，见第十八章）
+- 升级日期：2026-09-16（v1 → v2）；2026-10-04（v2 → v3）；2026-10-04（v3 同期追加 PWA 与一键部署，见 8.7）；2026-10-04（v3.1 参数表补齐 2023/2024 年度 + 口径修正，见第九章）；2026-10-04（v3.2 逐城回到官方公告复核，见第十章）；2026-10-04（v3.3 `verified_on` 换为真实公告日 + 修正浙江自然年度滞后，见第十一章）；2026-10-04（v3.4 补齐最后三行 2025 年度公告日，见第十二章）；2026-10-04（v3.5 Excel 导出去第三方依赖 + 双引擎逐字节一致，见第十三章）；2026-10-04（v3.6 申报基数可自定义 + CLI 崩溃缺陷修复，见第十四章）；2026-10-05（v3.7 医疗固定附加费 `medical_fixed`，见第十五章）；2026-10-05（v3.8 支持 12 个月不等薪资，见第十六章）；2026-10-05（v3.9 发布门禁可信任化：`check` 模式 + 真实退出码 + 交付物漂移守卫，见第十七章）；2026-10-05（v3.10 发布不再代你提交：`publish` 免交互 + 确认制推送 + 脏工作树前置拦截，见第十八章）；2026-10-05（v3.11 发布门禁可选硬失败：`--require-node` 缺 node 不再静默跳过，见第十九章）
 - 升级前版本：v1（上海 2026 单城市单年度，`shanghai_config.json`）
 - 升级后版本：v2（8 城市 × 多年度 × 半年度 + 全套高级功能，`config.json`）
-- 最新版本：**v3.10**（v3 的跨平台单文件 Web UI + PWA + 发布门禁（`check` / `publish` / 确认制）；参数表 **8 城 × 2023–2026 全 32 行为官方公告日**；CSV/Excel 导出全部零依赖；支持自定义申报基数、医疗固定附加费与**逐月不同薪资**；四套回归共 **494 条断言**，见第八～十八章）
+- 最新版本：**v3.11**（v3 的跨平台单文件 Web UI + PWA + 发布门禁（`check` / `publish` / 确认制 / `--require-node` 缺 node 硬失败）；参数表 **8 城 × 2023–2026 全 32 行为官方公告日**；CSV/Excel 导出全部零依赖；支持自定义申报基数、医疗固定附加费与**逐月不同薪资**；四套回归共 **506 条断言**，见第八～十九章）
 
 ---
 
@@ -194,7 +194,7 @@ v2 仅有命令行形态，无法在移动端（安卓 / iOS）与无 Python 环
 | `src/xlsx_report.py` ↔ `web/xlsx-report.js` | **v3.5 新增**：四表报表（年度汇总/逐月明细/政策参数/年终奖对比）与 25 列定义 |
 | `src/test_xlsx_writer.py` | **v3.5 新增**：Excel 契约测试 51 条（包结构、样式、双引擎字节相同、内嵌副本未漂移） |
 | `src/test_cli_smoke.py` | **v3.6 新增**：CLI 端到端冒烟测试 26 条（脚本化 stdin 跑完整 `main()`，覆盖申报基数、医疗定额、逐月薪资与反推） |
-| `src/test_deploy_gate.py` | **v3.9 新增、v3.10 扩充至 38 条**：发布门禁自身的守卫（失败必须非零退出、不代提交、`check` 模式零副作用） |
+| `src/test_deploy_gate.py` | **v3.9 新增、v3.10/3.11 扩充至 50 条**：发布门禁自身的守卫（失败必须非零退出、不代提交、`check` 模式零副作用、缺 node 时 `--require-node` 必须硬失败） |
 | `web/xlsx-sample.mjs` | 跨引擎探针：`node web/xlsx-sample.mjs [--report]` 输出与 CLI 相同的 xlsx 字节 |
 | `web/inline-xlsx.mjs` | 构建辅助脚本：将两个 Excel 模块重新内联回 `index.html`（v3.5 新增） |
 | `web/test-compute.js` | Node.js 等价性测试（379 条断言，验证 JS 与 Python 结果一致，并含内嵌副本防漂移与交付物行尾稳定检查） |
@@ -204,7 +204,7 @@ v2 仅有命令行形态，无法在移动端（安卓 / iOS）与无 Python 环
 | `web/manifest.webmanifest` + `web/sw.js` + `web/icons/` | PWA 安装清单、离线缓存 Service Worker 与应用图标（v3 同期追加，见 8.7） |
 | `run.bat`（改） | Windows 双菜单：[1] CLI [2] Web UI |
 | `run.sh`（新） | macOS / Linux / Android Termux 双菜单 |
-| `deploy-pages.bat` / `deploy-pages.sh` | 发布门禁（Windows / macOS、Linux）；v3.5 起额外校验内嵌副本一致性与 Excel 契约测试；**v3.9 新增 `check` 只校验模式与交付物漂移守卫；v3.10 起不再代为提交**（`publish` 免交互，裸跑为确认制） |
+| `deploy-pages.bat` / `deploy-pages.sh` | 发布门禁（Windows / macOS、Linux）；v3.5 起额外校验内嵌副本一致性与 Excel 契约测试；**v3.9 新增 `check` 只校验模式与交付物漂移守卫；v3.10 起不再代为提交**（`publish` 免交互，裸跑为确认制）；**v3.11 新增 `--require-node`**（缺 node 由静默跳过改为硬失败，位置不限） |
 | `.github/workflows/deploy-pages.yml` | 推送到 main/master 后自动发布 GitHub Pages |
 
 ### 8.3 技术选型与关键决策
@@ -221,7 +221,7 @@ v2 仅有命令行形态，无法在移动端（安卓 / iOS）与无 Python 环
 
 ### 8.5 验证
 
-- **单元等价性**：`web/test-compute.js` 全通过（v3 时 70+ 断言 → v3.1 157 → v3.2 191 → v3.3 277 → v3.4 316 → v3.6 345 → v3.7 361 → v3.8 378 → v3.9 379 条）；v3.5 另加 `python src/test_xlsx_writer.py` 的 51 条 Excel 契约断言；v3.6 另加 `python src/test_cli_smoke.py` 的 CLI 端到端断言（v3.8 后共 26 条）；v3.9 另加 `python src/test_deploy_gate.py` 的门禁守卫断言（v3.10 扩充至 38 条）。四套合计 **494 条**。
+- **单元等价性**：`web/test-compute.js` 全通过（v3 时 70+ 断言 → v3.1 157 → v3.2 191 → v3.3 277 → v3.4 316 → v3.6 345 → v3.7 361 → v3.8 378 → v3.9 379 条）；v3.5 另加 `python src/test_xlsx_writer.py` 的 51 条 Excel 契约断言；v3.6 另加 `python src/test_cli_smoke.py` 的 CLI 端到端断言（v3.8 后共 26 条）；v3.9 另加 `python src/test_deploy_gate.py` 的门禁守卫断言（v3.10 扩至 38 条、v3.11 扩至 50 条）。四套合计 **506 条**。
 - **浏览器端到端**：实际渲染为正常 UI（非原始 JS 文本），改月薪 20000→30000 结果实时刷新，4 个 Tab 正常，控制台零报错。
 - **Python 交叉验证**：上海 / 2026 / 月薪 30000 / 公积金 7% → 第 1 月到手 **24157.50**、五险一金 **5250.00**，JS 与 Python 完全一致。
 
@@ -631,6 +631,37 @@ v3.9 加 `check` 模式时暴露了旧默认行为的代价：`deploy-pages.bat`
   **取消并 exit 0**，远程仍停在旧 sha（`b40e8ee`）、`ahead` 仍为 2——非交互环境拿不到输入时同样走取消分支。
 - 计数：`src/test_deploy_gate.py` 由 21 条扩至 **38 条**（含新增的 `& goto`/`& exit` errorlevel 泄露 lint），
   四套合计 **494 条**（379 + 51 + 26 + 38）。
+
+---
+
+## 十九、v3.11 发布门禁可选硬失败：`--require-node`（2026-10-05）
+
+### 19.1 问题：缺 node 时最关键的守卫被静默跳过
+
+`deploy-pages.bat` / `deploy-pages.sh` 的 [2/5] 步在检测不到 node 时只打印一句「未检测到 node,跳过内联一致性校验」就继续走完门禁并 **exit 0**。没装 Node.js 的机器上，**内联副本一致性、计算引擎断言与交付物漂移三道守卫全部不生效**，门禁却照样显示「全部通过」——此前只能靠打 tag 后 CI `release.yml` 的独立漂移检查兜底。README 也从未写明这个坑（「改源必须重跑内联」写了，但「node 缺失守卫会被跳过」没写）。
+
+### 19.2 改动
+
+| 项 | 说明 |
+| --- | --- |
+| `deploy-pages.bat` / `deploy-pages.sh` | 新增可选参数 `--require-node`：缺 node 时打印失败原因并以退出码 1 终止；不加该参数时行为不变（响亮跳过）。参数解析改为**先剥离选项、余下按位置**取模式/远程名，flag 位置不限、可与任何模式组合（`.bat` 用三个槽位 if-shift 实现，不新增 `goto`，避免 cmd UTF-8 重扫杂音）；两脚本用法注释与用法行同步更新 |
+| `src/test_deploy_gate.py` | 新增 12 条守卫（38 → 50）：两脚本必须文档化 `--require-node`；「git 工具链 + System32」的最小 PATH 先探针确证 `where node` 找不到，再在临时仓验证——缺 node 时 `check` 仍 exit 0 且明说「跳过内联一致性校验」，`check --require-node` 则 exit 1 且说明「失败: 未检测到 node」（bat 侧另验 flag 放在模式前同样生效） |
+| README / 本文档 | 部署门禁段落新增「**本机没装 node ≠ 门禁通过**」警示与 `--require-node` 用法，注明 CI `release.yml` 漂移检查是最终兜底；项目结构注释与测试计数同步 |
+
+### 19.3 行为对照
+
+| 场景 | 不加 `--require-node` | 加 `--require-node` |
+| --- | --- | --- |
+| 本机有 node | 跑全套内联校验（不变） | 同左（参数不改变通过路径） |
+| 本机无 node | 打印「跳过内联一致性校验」后继续，`check` 仍 exit 0 | 打印「失败: 未检测到 node」，exit 1 |
+| CI（`release.yml`） | 漂移检查独立执行，不受影响 | 同左 |
+
+### 19.4 验证
+
+- **先红后绿**：新增 12 条断言首跑 6 项 FAIL（静态文档断言 + 两侧 flag 硬失败与文案）→ 实现后 `python src/test_deploy_gate.py` **50 条全绿**；`bash -n deploy-pages.sh` 通过。
+- **临时仓（无 node 的最小 PATH）**：`check` exit 0 且输出含「跳过内联一致性校验」；`check --require-node` exit 1 且含「失败: 未检测到 node」；bat 侧 `--require-node check`（flag 前置）同样 exit 1。
+- **真仓（有 node）**：`check --require-node` 两侧均 exit 0（通过路径不受参数影响）；`bash deploy-pages.sh bogusarg` 仍 exit 2；bat 未知参数行为与 HEAD 一致（本就按 interactive 处理，非本次改动）。
+- **cmd 杂音说明**：本机 cmd 对 UTF-8 批处理存在既有的 rem 行误读杂音（HEAD 基线即有 5 行 `'xxx' is not recognized`，退出码与断言不受影响）；本次改动未增加杂音行数，且新解析未新增任何 `goto`。
 
 ---
 

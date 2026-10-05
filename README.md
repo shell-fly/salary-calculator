@@ -150,7 +150,7 @@ china-salary-calculator/
 ├── config.json                   # 8 城 × 2023–2026 参数（税率/专项附加，CLI 与 Web 共用）
 ├── run.bat                       # Windows 双菜单入口（CLI / Web）
 ├── run.sh                        # macOS / Linux / Termux 双菜单入口
-├── deploy-pages.bat / .sh        # 发布门禁：check 只校验 / publish 免交互推送 / 裸跑为确认制推送
+├── deploy-pages.bat / .sh        # 发布门禁：check 只校验 / publish 免交互推送 / 裸跑为确认制推送；--require-node 缺 node 硬失败
 └── docs/                         # 定名说明、变更记录、口径比对、设计与实现文档
 ```
 
@@ -164,7 +164,7 @@ china-salary-calculator/
 node web/test-compute.js            # 379 条断言：JS 与 Python 计算一致 + 内联副本未漂移
 python src/test_xlsx_writer.py      # 51 条契约断言，含“CLI 与网页 Excel 逐字节一致”
 python src/test_cli_smoke.py        # 26 条 CLI 端到端断言（驱动完整 main()，含申报基数、医疗定额、逐月薪资与反推）
-python src/test_deploy_gate.py      # 38 条门禁守卫：检查失败必须非零退出、不代提交、check 模式零副作用
+python src/test_deploy_gate.py      # 50 条门禁守卫：失败必须非零退出、不代提交、check 零副作用、缺 node 时 --require-node 必须硬失败
 ```
 
 The JS engine is numerically equivalent to the Python CLI; the .xlsx writer is a byte-for-byte
@@ -188,12 +188,14 @@ parenthesized block silently returns 0), and `check` mode must leave the reposit
 # Windows
  deploy-pages.bat            # 跑门禁 → 列出待推送提交 → 交互确认后推送（不会代为提交）
  deploy-pages.bat check      # 只跑门禁：不提交、不推送，无任何副作用（脏工作树也可跑）
+ deploy-pages.bat check --require-node   # 同上，但缺 node 直接失败（不静默跳过内联守卫）
  deploy-pages.bat publish    # 跑门禁后直接推送（免交互，供 CI 用）
  deploy-pages.bat gitee      # = publish gitee（可选 github / both，默认 both）
 
 # macOS / Linux
  bash deploy-pages.sh                  # 同上，确认制
  bash deploy-pages.sh check            # 只校验
+ bash deploy-pages.sh check --require-node   # 同上，但缺 node 直接失败
  bash deploy-pages.sh publish [both|gitee|github]
 ```
 
@@ -203,6 +205,11 @@ parenthesized block silently returns 0), and `check` mode must leave the reposit
 
 > 门禁除内联副本一致性、三套断言外，还会检查**交付物漂移**：若 `index.html` 原本与已提交版本一致，
 > 而重跑内联脚本后它变了，说明仓里交付旧副本（改了源文件却忘跑内联），门禁直接非零退出。
+
+> ⚠️ **本机没装 node ≠ 门禁通过**：缺 node 时 [2/5] 的内联一致性校验、引擎断言与漂移检查会被**静默跳过**
+> （只打印提示，退出码仍为 0），此时的「门禁通过」不覆盖 Web UI 内嵌副本。`--require-node` 可与任何模式
+> 组合、参数位置不限，加上后缺 node 直接失败退出 1；CI 侧 [`release.yml`](.github/workflows/release.yml)
+> 的内联漂移检查是最终兜底。
 
 脚本会校验 PWA 文件、提交并推送到已配置的远程,然后打印各平台的启用步骤。
 
