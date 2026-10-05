@@ -98,6 +98,16 @@ def test_invalid_version_exits_two():
     assert r.returncode == 2, (r.returncode, r.stdout, r.stderr)
 
 
+def test_entry_scripts_forward_to_release_py_with_parity():
+    root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    bat = open(os.path.join(root, "release.bat"), encoding="utf-8").read()
+    sh = open(os.path.join(root, "release.sh"), encoding="utf-8").read()
+    assert "release.py" in bat and "%*" in bat
+    assert "chcp 65001" in bat
+    assert "release.py" in sh and '"$@"' in sh
+    assert sh.startswith("#!/usr/bin/env bash")
+
+
 def run_suite():
     fns = [v for k, v in sorted(globals().items()) if k.startswith("test_")]
     fails = 0
