@@ -24,6 +24,8 @@
   Five insurances + housing fund with per-city base bounds and rates, auto half-year switching.
 - **可自定义申报基数**：单位按下限申报时，社保/公积金基数可分别指定（上/下半年各一组，留空即跟随月薪，填入后仍按政策区间限幅）。
   Declared contribution bases: many employers report the statutory lower bound instead of the real salary — override it per half-year, or leave it blank to follow the salary.
+- **逐月不同薪资**：提成/发薪不均时可逐月录入 12 个月税前工资，累计预扣按真实逐月收入累加（留空即沿用税前月薪，填 0 表示该月无收入）。
+  Per-month gross salaries: cumulative withholding is built from the real monthly income series, not `salary × months`.
 - **个人所得税（累计预扣法）**：7 级年度税率表、5000 元起征点、专项附加扣除（可设起止月）。
   IIT via cumulative withholding — 7 brackets, ¥5000 threshold, special additional deductions with month ranges.
 - **医疗固定附加费**：北京个人医保为“基数 × 2% + 3 元/月”（大额医疗费用互助资金），定额同样参与个税专项扣除；其余城市无个人按月定额。
@@ -58,9 +60,9 @@ Open `web/index.html` directly in any browser — **nothing to install**.
 | Android | 把 `web/index.html` 传到手机，用 Chrome 打开（或 Termux 内 `bash run.sh`） |
 | iPhone / iPad | 通过 AirDrop / 文件 App / iCloud 传输后用 Safari 打开 |
 
-- 单文件自包含（约 256 KB），**离线可用**；参数改动实时刷新所有结果，CSV / Excel 导出也完全离线完成。
+- 单文件自包含（约 260 KB），**离线可用**；参数改动实时刷新所有结果，CSV / Excel 导出也完全离线完成。
 - 想更新城市/年度数据：点击页面「导入配置」选择外部 `config.json` 覆盖内嵌默认值。
-- Self-contained single file (~256 KB), **works offline**; results update in real time as you edit
+- Self-contained single file (~260 KB), **works offline**; results update in real time as you edit
   inputs, and both the CSV and Excel exports work fully offline as well.
 - To update city/year data: click "导入配置 / Import" and select an external `config.json`.
 
@@ -129,14 +131,14 @@ china-salary-calculator/
 │   ├── xlsx_writer.py            # 零依赖 .xlsx 写入器（表头样式/千分位/冻结/筛选）
 │   ├── xlsx_report.py            # 四表报表（与 web/xlsx-report.js 逐字对应）
 │   ├── test_xlsx_writer.py       # Excel 契约测试（含双引擎逐字节一致校验）
-│   └── test_cli_smoke.py         # CLI 端到端冒烟测试（脚本化 stdin 驱动完整 main()，21 条）
+│   └── test_cli_smoke.py         # CLI 端到端冒烟测试（脚本化 stdin 驱动完整 main()，26 条）
 ├── web/
 │   ├── index.html                # Web UI 单文件（内嵌 Vue 3 + 计算引擎 + Excel 引擎 + 配置）
 │   ├── compute.js                # 计算引擎 JS 源（开发参考）
 │   ├── xlsx-writer.js            # Excel 写入器 JS 源（与 Python 版输出一致）
 │   ├── xlsx-report.js            # 四表报表 JS 源（含 25 列定义）
 │   ├── xlsx-sample.mjs           # 跨引擎探针：node web/xlsx-sample.mjs [--report]
-│   ├── test-compute.js           # Node.js 等价性测试（361 条断言，含内联副本防漂移）
+│   ├── test-compute.js           # Node.js 等价性测试（378 条断言，含内联副本防漂移）
 │   ├── inline-vue.mjs            # 构建脚本：内联 Vue 运行时
 │   ├── inline-compute.mjs        # 构建脚本：将 compute.js 重新内联回 index.html
 │   ├── inline-config.mjs         # 构建脚本：将 config.json 重新内联回 index.html
@@ -158,9 +160,9 @@ china-salary-calculator/
 计算引擎、Excel 引擎与 CLI 入口全部可回归验证，均不需联网（以下命令均在仓根目录执行）：
 
 ```bash
-node web/test-compute.js            # 361 条断言：JS 与 Python 计算一致 + 内联副本未漂移
+node web/test-compute.js            # 378 条断言：JS 与 Python 计算一致 + 内联副本未漂移
 python src/test_xlsx_writer.py      # 51 条契约断言，含“CLI 与网页 Excel 逐字节一致”
-python src/test_cli_smoke.py        # 21 条 CLI 端到端断言（驱动完整 main()，含申报基数、医疗定额与反推）
+python src/test_cli_smoke.py        # 26 条 CLI 端到端断言（驱动完整 main()，含申报基数、医疗定额、逐月薪资与反推）
 ```
 
 The JS engine is numerically equivalent to the Python CLI; the .xlsx writer is a byte-for-byte
