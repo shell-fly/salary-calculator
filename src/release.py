@@ -54,3 +54,30 @@ def collect_zip_members(repo_root):
             if os.path.isfile(full):
                 members.append(_posix(os.path.join(WEB_ICON_DIR, name)))
     return members
+
+
+def render_release_notes(version, html_name, zip_name):
+    """Return a paste-ready Release description (Chinese, matching README wording)."""
+    return (
+        "## 工资计算器（中国）%s\n\n"
+        "8 城市 × 2023–2026 四个社保年度 × 半年度的五险一金 + 个税 + 年终奖 + 汇算清缴计算器。\n"
+        "支持可自定义申报基数、逐月不同薪资、年终奖双方案对比、反推税前、CSV/Excel 导出（均零第三方依赖）。\n\n"
+        "### 下载即用 / Get started\n"
+        "1. **单文件免安装**：下载 `%s`，任意设备双击用浏览器打开即可，离线可用、零安装。\n"
+        "2. **完整发行包**：下载并解压 `%s`，Windows 双击 `run.bat`、macOS/Linux 运行 `bash run.sh`（CLI 需 Python 3）。\n\n"
+        "> 免责声明：本工具仅供演示与参考，权威数值以税务局、社保及公积金管理部门公布为准。\n"
+        "> License：Apache License 2.0。\n"
+    ) % (version, html_name, zip_name)
+
+
+def render_upload_steps(version):
+    """Return the manual upload instructions for GitHub Releases and Gitee."""
+    return (
+        "\n──────── 上传到 GitHub Releases ────────\n"
+        "  1) 仓库页 → Releases → Draft a new release\n"
+        "  2) Choose tag: 建议先 `git tag %s && git push github %s`（本脚本不代为打 tag）\n"
+        "  3) 上传 dist/ 下的 .html 与 .zip 两个资产文件，粘贴 Release 文案，Publish\n"
+        "\n──────── 上传到 Gitee 发行版 ────────\n"
+        "  1) 仓库页 → 管理 → 发行版 → 新建发行版\n"
+        "  2) 标签填 %s，上传 dist/ 下的 .html 与 .zip，保存发布\n"
+    ) % (version, version, version)

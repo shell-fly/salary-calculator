@@ -45,6 +45,20 @@ def test_collect_zip_members_has_required_and_excludes_dev():
         assert m not in forbidden_exact, m
 
 
+def test_render_release_notes_contains_version_and_both_assets():
+    txt = release.render_release_notes("v3.11", "工资计算器（中国）_v3.11.html",
+                                       "工资计算器（中国）_v3.11.zip")
+    assert "工资计算器（中国）v3.11" in txt
+    assert "工资计算器（中国）_v3.11.html" in txt
+    assert "工资计算器（中国）_v3.11.zip" in txt
+    assert "Apache License 2.0" in txt or "Apache-2.0" in txt
+
+
+def test_render_upload_steps_mentions_both_platforms():
+    txt = release.render_upload_steps("v3.11")
+    assert "GitHub" in txt and "Gitee" in txt
+
+
 def run_suite():
     fns = [v for k, v in sorted(globals().items()) if k.startswith("test_")]
     fails = 0
