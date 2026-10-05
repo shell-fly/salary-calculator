@@ -5,8 +5,10 @@
 """test_release.py — guard for the one-click Release packaging script (src/release.py)."""
 import os
 import re
+import shutil
 import subprocess
 import sys
+import zipfile
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__)))
 import release  # noqa: E402
@@ -57,6 +59,43 @@ def test_render_release_notes_contains_version_and_both_assets():
 def test_render_upload_steps_mentions_both_platforms():
     txt = release.render_upload_steps("v3.11")
     assert "GitHub" in txt and "Gitee" in txt
+
+
+def _run_release(args, extra_env=None):
+    env = dict(os.environ)
+    env["CSRELEASE_ALLOW_DIRTY"] = "1"
+    env["PYTHONIOENCODING"] = "utf-8"
+    if extra_env:
+        env.update(extra_env)
+    root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    script = os.path.join(root, "src", "release.py")
+    return subprocess.run([sys.executable, script] + args, cwd=root,
+                          capture_output=True, text=True, env=env,
+                          encoding="utf-8", errors="replace")
+
+
+def test_fast_build_produces_dist_html_and_zip_byte_identical():
+    root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    html_name = "工资计算器（中国）_v9.9.9.html"
+    zip_name = "工资计算器（中国）_v9.9.9.zip"
+    dist = os.path.join(root, "dist")
+    shutil.rmtree(dist, ignore_errors=True)
+    r = _run_release(["v9.9.9", "--fast"])
+    assert r.returncode == 0, r.stdout + r.stderr
+    src_html = os.path.join(root, "web", "index.html")
+    out_html = os.path.join(dist, html_name)
+    with open(src_html, "rb") as a, open(out_html, "rb") as b:
+        assert a.read() == b.read()
+    assert os.path.isfile(os.path.join(dist, zip_name))
+    with zipfile.ZipFile(os.path.join(dist, zip_name)) as z:
+        names = set(z.namelist())
+    assert "web/index.html" in names and "src/salary_calculator.py" in names
+    shutil.rmtree(dist, ignore_errors=True)
+
+
+def test_invalid_version_exits_two():
+    r = _run_release(["3.11", "--fast"])
+    assert r.returncode == 2, (r.returncode, r.stdout, r.stderr)
 
 
 def run_suite():
