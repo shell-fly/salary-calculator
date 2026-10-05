@@ -22,6 +22,29 @@ def test_validate_version_rejects_bad_forms():
         assert not release.validate_version(bad), bad
 
 
+def test_build_names_use_product_and_version():
+    html, zp = release.build_names("v3.11")
+    assert html == "工资计算器（中国）_v3.11.html"
+    assert zp == "工资计算器（中国）_v3.11.zip"
+
+
+def test_collect_zip_members_has_required_and_excludes_dev():
+    root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    members = set(release.collect_zip_members(root))
+    required = {"web/index.html", "web/manifest.webmanifest", "web/sw.js",
+                "src/salary_calculator.py", "src/xlsx_writer.py", "src/xlsx_report.py",
+                "config.json", "shanghai_config.json", "run.bat", "run.sh",
+                "README.md", "LICENSE"}
+    assert required <= members, required - members
+    assert any(m.startswith("web/icons/") for m in members)
+    forbidden_prefix = ("docs/", ".github/", "dist/", "src/test_", "web/inline-")
+    forbidden_exact = {"web/compute.js", "web/test-compute.js", "web/package.json",
+                       "web/gen-icons.ps1", "web/xlsx-sample.mjs"}
+    for m in members:
+        assert not m.startswith(forbidden_prefix), m
+        assert m not in forbidden_exact, m
+
+
 def run_suite():
     fns = [v for k, v in sorted(globals().items()) if k.startswith("test_")]
     fails = 0
