@@ -249,6 +249,8 @@ bash release.sh v3.11
 
 脚本会先复用发布门禁（内联一致性 + 计算引擎/Excel/CLI 断言），通过后打印两平台上传步骤与可直接粘贴的 Release 文案。加 `--fast` 可跳过重型门禁（仅供调试）。`dist/` 已被 `.gitignore` 忽略。
 
+**推 tag 自动发布（GitHub + Gitee）**：新增 `.github/workflows/release.yml`，推送形如 `v3.11` 的标签即自动跑内联漂移检查→打包→建/覆盖 GitHub Release；若仓库配置了 `GITEE_TOKEN` Secret，则同步覆盖式发布 Gitee 发行版（Gitee 步骤为软失败，不阻断 GitHub）。同标签重跑会覆盖资产。Gitee 未配 token 时仅发 GitHub。OBS 附件登记细节以首次 CI 运行日志为准（见 `docs/superpowers/specs/2026-10-05-release-github-actions-design.md`）。
+
 ---
 
 ## 📚 文档 / Docs
