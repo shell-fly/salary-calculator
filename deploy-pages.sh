@@ -1,25 +1,49 @@
 #!/usr/bin/env bash
-# deploy-pages.sh — 一键校验并部署 Web UI (PWA) 到 GitHub / Gitee Pages
-# 用法: bash deploy-pages.sh [check|gitee|github|both]
-#   check  只跑门禁（[1/5]-[3/5]），不提交、不推送，无任何副作用
-#   其余值只控制往哪些远程推送，默认 both（会提交并推送）
+# deploy-pages.sh — Web UI (PWA) 发布门禁与推送
+# 用法:
+#   bash deploy-pages.sh                          跑门禁,列出待推送提交并交互确认后推送
+#   bash deploy-pages.sh check                    只跑门禁([1/5]-[3/5]),不提交不推送,无副作用(脏工作树也可跑)
+#   bash deploy-pages.sh publish [both|gitee|github]   跑门禁后直接推送(免交互,供 CI 使用)
+#   bash deploy-pages.sh gitee|github|both         等价于 publish <target>(向后兼容)
+# 本脚本不会替你提交:发布前工作树必须干净,提交信息请自己按 Conventional Commits 写好。
+# 这样才不会出现一个把真实变更抹平的 "chore(deploy): update Web UI / PWA assets" 大提交。
 set -euo pipefail
 cd "$(dirname "$0")"
 
-TARGET="${1:-both}"
-CHECK_ONLY=0
-if [ "$TARGET" = "check" ] || [ "$TARGET" = "--check" ] || [ "$TARGET" = "-c" ]; then
-  CHECK_ONLY=1
-fi
+MODE=interactive
+TARGET=both
+USAGE="用法: bash deploy-pages.sh [check|publish [both|gitee|github]|gitee|github|both]"
+case "${1:-}" in
+  "" ) MODE=interactive ;;
+  check|--check|-c ) MODE=check ;;
+  publish|push ) MODE=publish; TARGET="${2:-both}" ;;
+  both|gitee|github ) MODE=publish; TARGET="$1" ;;
+  * ) echo "$USAGE"; exit 2 ;;
+esac
+case "$TARGET" in
+  both|gitee|github ) ;;
+  * ) echo "$USAGE"; exit 2 ;;
+esac
 OK=1
 
 echo "==============================================="
-if [ "$CHECK_ONLY" = 1 ]; then
-  echo " 工资计算器（中国） — Pages 门禁校验（check 模式：不提交、不推送）"
-else
-  echo " 工资计算器（中国） — Pages 部署检查与发布"
-fi
+case "$MODE" in
+  check ) echo " 工资计算器（中国） — 发布门禁校验（check：不提交、不推送）" ;;
+  publish ) echo " 工资计算器（中国） — 发布门禁 + 推送（publish：免交互，目标 $TARGET）" ;;
+  * ) echo " 工资计算器（中国） — 发布门禁 + 推送（确认制，目标 $TARGET）" ;;
+esac
 echo "==============================================="
+
+# 0) 发布前先做最便宜、也最常踩的检查:工作树必须已提交。放在重型门禁之前,省掉几十秒无效测试。
+if [ "$MODE" != "check" ] && git rev-parse --is-inside-work-tree >/dev/null 2>&1 && [ -n "$(git status --porcelain)" ]; then
+  echo "  ✗ 失败: 工作树有未提交的改动,本脚本不会代为提交:"
+  git status --porcelain | sed 's/^/      /'
+  echo ""
+  echo "  请先自行提交(建议 Conventional Commits),例如:"
+  echo '      git commit -am "feat(scope): 简述本次变更"'
+  echo "  然后再运行本脚本;只想校验而不发布可用: bash deploy-pages.sh check"
+  exit 1
+fi
 
 # 1) 校验 PWA 必需文件
 echo "[1/5] 校验 Web UI / PWA 文件..."
@@ -73,26 +97,51 @@ if [ -z "$REMOTES" ]; then
 else
   echo "  已配置远程: $REMOTES"
 fi
+BRANCH=$(git rev-parse --abbrev-ref HEAD)
+echo "  当前分支: $BRANCH"
+AHEAD=""
+if git rev-parse --verify --quiet "origin/$BRANCH" >/dev/null 2>&1; then
+  AHEAD=$(git rev-list --count "origin/$BRANCH..HEAD" 2>/dev/null || echo "")
+fi
 
-# 3) check 模式到此结束：不提交、不推送、不打印发布步骤
-if [ "$CHECK_ONLY" = 1 ]; then
-  echo "[4/5] check 模式：跳过提交与推送"
+# 3) check 模式到此结束：不推送、不打印发布步骤
+if [ "$MODE" = "check" ]; then
+  echo "[4/5] check 模式：不推送"
   echo "[5/5] check 模式：未发布,故不打印 Pages 控制台启用步骤"
   echo ""
   echo "门禁全部通过 ✅（需要发布请直接运行: bash deploy-pages.sh）"
   exit 0
 fi
 
-# 4) 提交并推送
-echo "[4/5] 提交本地改动并推送..."
-git add -A
-if ! git diff --cached --quiet; then
-  git commit -m "chore(deploy): update Web UI / PWA assets" || true
-else
-  echo "  无待提交改动"
+if [ -n "$AHEAD" ]; then
+  echo "  待推送提交: $AHEAD 个"
+  if [ "$AHEAD" != "0" ]; then git log --oneline "origin/$BRANCH..HEAD" | sed 's/^/    /'; fi
 fi
-BRANCH=$(git rev-parse --abbrev-ref HEAD)
-push() { [ -n "$(git remote -v | awk -v r="$1" '$1==r{print}')" ] && { echo "  推送到 $1 ($BRANCH)..."; git push -u "$1" "$BRANCH"; } || echo "  跳过: 未配置远程 '$1'"; }
+if [ "$AHEAD" = "0" ]; then
+  echo ""
+  echo "本地与 origin/$BRANCH 已同步,无需推送。"
+  exit 0
+fi
+
+# 4) 推送（本脚本不代为提交）
+echo "[4/5] 推送到远程..."
+echo "  本脚本不代为提交;请确认上面的待推送提交就是你想发布的内容。"
+if [ "$MODE" != "publish" ]; then
+  printf '  确认推送到 %s (输入 y 确认,其他任意键取消): ' "$BRANCH"
+  read -r REPLY || REPLY=""
+  if [ "${REPLY:-n}" != "y" ] && [ "${REPLY:-n}" != "Y" ]; then
+    echo "  已取消推送,本地提交保持不变。"
+    exit 0
+  fi
+fi
+push() {
+  if git remote get-url "$1" >/dev/null 2>&1; then
+    echo "  推送到 $1 ($BRANCH)..."
+    git push -u "$1" "$BRANCH" || { echo "  ✗ 推送到 $1 未成功"; return 1; }
+  else
+    echo "  跳过: 未配置远程 '$1'"
+  fi
+}
 case "$TARGET" in
   github) push origin; push github ;;
   gitee)  push gitee; push origin ;;

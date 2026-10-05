@@ -1,31 +1,60 @@
 @echo off
 chcp 65001 >nul
 setlocal enabledelayedexpansion
-rem deploy-pages.bat — 一键校验并部署 Web UI (PWA) 到 GitHub / Gitee Pages
-rem 用法: deploy-pages.bat [check^|gitee^|github^|both]
-rem   check  只跑门禁([1/5]-[3/5]),不提交、不推送,无任何副作用
-rem   其余值只控制往哪些远程推送,默认 both(会提交并推送)
+rem deploy-pages.bat — Web UI (PWA) 发布门禁与推送
 rem
-rem 重要(cmd 陷阱): 写在括号块内部的 `exit /b 1` 会丢掉退出码,进程仍返回 0,
-rem   导致门禁"打印失败但不阻断"。因此本脚本的每条检查都用
-rem   `set "ERR=%%ERRORLEVEL%%"` 记下错误码,失败一律用顶层单行 `exit /b 1` 退出。
-rem   该回归由 src/test_deploy_gate.py 守住(无 PWA 文件时必须 exit 1)。
+rem 用法:
+rem   deploy-pages.bat                    跑门禁,然后列出待推送提交并交互确认后推送
+rem   deploy-pages.bat check              只跑门禁([1/5]-[3/5]),不提交不推送,无副作用(脏工作树也可跑)
+rem   deploy-pages.bat publish [target]   跑门禁后直接推送(免交互,供 CI 使用);target = both^|gitee^|github
+rem   deploy-pages.bat gitee / github / both   等价于 publish <target>(向后兼容)
+rem
+rem 本脚本不会替你提交:发布前工作树必须干净,提交信息请自己按 Conventional Commits 写好。
+rem 这样才不会出现一个把真实变更抹平的 "chore(deploy): update Web UI / PWA assets" 大提交。
+rem
+rem 重要(cmd 陷阱): 写在括号块内部的 `exit /b N` 会丢掉退出码,进程仍返回 0,导致门禁"打印失败却不阻断"。
+rem   因此本脚本失败一律走子例程 + 顶层单行 exit,错误码先存入 ERR。由 src/test_deploy_gate.py 守住。
 cd /d "%~dp0"
 
-set "TARGET=%~1"
+set "MODE=interactive"
+set "TARGET=both"
+set "ARG1=%~1"
+set "ARG2=%~2"
+rem 第一个参数只表示模式或向后兼容的远程名;不能用它直接当 TARGET(否则 check 会被当成远程名而误报用法错误)。
+if /i "%ARG1%"=="check" set "MODE=check"
+if /i "%ARG1%"=="--check" set "MODE=check"
+if /i "%ARG1%"=="-c" set "MODE=check"
+if /i "%ARG1%"=="publish" set "MODE=publish"
+if /i "%ARG1%"=="push" set "MODE=publish"
+if /i "%ARG1%"=="both" set "MODE=publish"
+if /i "%ARG1%"=="gitee" set "MODE=publish"
+if /i "%ARG1%"=="github" set "MODE=publish"
+if /i "%ARG1%"=="both" set "TARGET=both"
+if /i "%ARG1%"=="gitee" set "TARGET=gitee"
+if /i "%ARG1%"=="github" set "TARGET=github"
+if /i "%ARG1%"=="publish" set "TARGET=%ARG2%"
+if /i "%ARG1%"=="push" set "TARGET=%ARG2%"
 if "%TARGET%"=="" set "TARGET=both"
-set "CHECK_ONLY="
-if /i "%TARGET%"=="check" set "CHECK_ONLY=1"
-if /i "%TARGET%"=="--check" set "CHECK_ONLY=1"
-if /i "%TARGET%"=="-c" set "CHECK_ONLY=1"
+set "VALID_TARGET="
+if /i "%TARGET%"=="both" set "VALID_TARGET=1"
+if /i "%TARGET%"=="gitee" set "VALID_TARGET=1"
+if /i "%TARGET%"=="github" set "VALID_TARGET=1"
+if defined VALID_TARGET goto :target_ok
+echo 用法: deploy-pages.bat [check^|publish [both^|gitee^|github]^|gitee^|github^|both]
+exit /b 2
+:target_ok
 
 echo ===============================================
-if defined CHECK_ONLY (
-  echo  工资计算器（中国） — Pages 门禁校验（check 模式：不提交、不推送）
-) else (
-  echo  工资计算器（中国） — Pages 部署检查与发布
-)
+if "%MODE%"=="check" echo  工资计算器（中国） — 发布门禁校验（check：不提交、不推送）
+if "%MODE%"=="publish" echo  工资计算器（中国） — 发布门禁 + 推送（publish：免交互，目标 %TARGET%）
+if "%MODE%"=="interactive" echo  工资计算器（中国） — 发布门禁 + 推送（确认制，目标 %TARGET%）
 echo ===============================================
+
+rem 发布前先做最便宜、也最容易踩的检查:工作树必须已提交。放在重型门禁之前,省掉几十秒无效测试。
+if "%MODE%"=="check" goto :skip_precheck
+call :check_worktree_committed
+if errorlevel 1 exit /b 1
+:skip_precheck
 
 echo [1/5] 校验 Web UI / PWA 文件...
 set "OK=1"
@@ -43,42 +72,67 @@ if errorlevel 1 exit /b 1
 call :check_python_suite
 if errorlevel 1 exit /b 1
 
-echo [3/5] 检查 git 远程...
+echo [3/5] 检查 git 远程与待推送提交...
 git rev-parse --is-inside-work-tree >nul 2>&1
 set "ERR=%ERRORLEVEL%"
 if not "%ERR%"=="0" echo   当前目录不是 git 仓库
 if not "%ERR%"=="0" exit /b 1
 set "HAS_REMOTE="
 for /f "tokens=1" %%r in ('git remote') do set "HAS_REMOTE=1"
-if not defined HAS_REMOTE (
+if defined HAS_REMOTE (
+  echo   已配置远程:
+  for /f "tokens=1" %%r in ('git remote') do echo     - %%r
+) else (
   echo   尚未配置任何远程。请先添加,例如:
   echo       git remote add origin https://github.com/用户名/仓库名.git
   echo     或 Gitee: git remote add gitee https://gitee.com/用户名/仓库名.git
-) else (
-  echo   已配置远程:
-  for /f "tokens=1" %%r in ('git remote') do echo     - %%r
 )
-
-if defined CHECK_ONLY goto :check_only
-
-echo [4/5] 提交本地改动并推送...
-git add -A
-git commit -m "chore(deploy): update Web UI / PWA assets" 2>nul || echo   无待提交改动
 for /f "tokens=*" %%b in ('git rev-parse --abbrev-ref HEAD') do set "BRANCH=%%b"
+echo   当前分支: !BRANCH!
+if "%MODE%"=="check" goto :check_only
 
-call :push origin
-if not "%TARGET%"=="gitee" call :push github
-if not "%TARGET%"=="github" call :push gitee
-goto :after_push
+call :count_ahead
+if "!AHEAD!"=="" goto :check_only
+echo   待推送提交: !AHEAD! 个
+if not "!AHEAD!"=="0" git log --oneline origin/!BRANCH!..HEAD
 
 :check_only
-echo [4/5] check 模式: 跳过提交与推送
+if not "%MODE%"=="check" goto :publish_gate
+if "!AHEAD!"=="0" goto :already_in_sync
+echo [4/5] check 模式: 不推送
 echo [5/5] check 模式: 未发布, 不打印 Pages 控制台启用步骤
 echo.
 echo 门禁全部通过。需要发布请直接运行: deploy-pages.bat
 exit /b 0
 
-:after_push
+:already_in_sync
+echo.
+echo 本地与 origin/!BRANCH! 已同步,无需推送。
+exit /b 0
+
+:publish_gate
+echo [4/5] 推送到远程...
+if not "!AHEAD!"=="" echo   本脚本不代为提交;请确认上面的待推送提交就是你想发布的内容。
+if "%MODE%"=="publish" goto :do_push
+echo.
+set "CONFIRM="
+set /p "CONFIRM=  确认推送到 !BRANCH! (输入 y 确认,其他任意键取消): "
+if /i "!CONFIRM!"=="y" goto :do_push
+echo   已取消推送,本地提交保持不变。
+exit /b 0
+
+:do_push
+call :push origin
+if errorlevel 1 exit /b 1
+if "%TARGET%"=="gitee" goto :push_gitee_done
+call :push github
+if errorlevel 1 exit /b 1
+:push_gitee_done
+if "%TARGET%"=="github" goto :push_done
+call :push gitee
+if errorlevel 1 exit /b 1
+:push_done
+
 echo [5/5] 推送完成。到网页控制台启用 Pages ^(首次一次性操作^):
 echo.
 echo   ── GitHub Pages ──────────────────────────────
@@ -101,7 +155,29 @@ echo 完成.
 exit /b 0
 
 rem ---------------------------------------------------------------- 子例程
-rem 每个失败分支都在子例程顶层 exit /b 1(不在括号块内),错误码才会真实传出。
+
+rem 工作树必须已提交:脚本不替你 commit,所以要先把这件事说清楚。
+:check_worktree_committed
+set "DIRTY="
+for /f "usebackq delims=" %%i in (`git status --porcelain`) do set "DIRTY=1"
+if not defined DIRTY exit /b 0
+echo   失败: 工作树有未提交的改动,本脚本不会代为提交。
+for /f "usebackq delims=" %%i in (`git status --porcelain`) do echo     !  %%i
+echo.
+echo   请先自行提交(建议 Conventional Commits),例如:
+echo       git add -A
+echo       git commit -m "feat(scope): 简述本次变更"
+echo   然后再运行本脚本;只想校验而不发布可用: deploy-pages.bat check
+exit /b 1
+
+:count_ahead
+set "AHEAD="
+git rev-list --count origin/!BRANCH!..HEAD >"%TEMP%\csgate_ahead.txt" 2>nul
+set "ERR=%ERRORLEVEL%"
+if not "%ERR%"=="0" exit /b 0
+set /p "AHEAD="<"%TEMP%\csgate_ahead.txt"
+del "%TEMP%\csgate_ahead.txt" >nul 2>&1
+exit /b 0
 
 :check_node_suite
 where node >nul 2>&1
@@ -153,7 +229,7 @@ exit /b 0
 :check_python_suite
 where python >nul 2>&1
 if not errorlevel 1 goto :run_python_checks
-echo   未检测到 python,跳过 xlsx 契约测试与 CLI 冒烟测试
+echo   未检测到 python,跳过 xlsx 契约测试、CLI 冒烟测试与门禁守卫测试
 exit /b 0
 
 :run_python_checks

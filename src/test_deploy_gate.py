@@ -97,6 +97,37 @@ def temp_git_repo(script_path):
         return None
 
 
+def committed_temp_repo(script_path):
+    """A temp repo with one committed file plus one uncommitted file, i.e. a dirty work tree."""
+    workdir = temp_git_repo(script_path)
+    if not workdir:
+        return None
+    with open(os.path.join(workdir, "seed.txt"), "w", encoding="utf-8") as handle:
+        handle.write("seed\n")
+    subprocess.run(["git", "add", "seed.txt"], cwd=workdir, capture_output=True)
+    subprocess.run(["git", "-c", "user.email=t@example.com", "-c", "user.name=t",
+                    "commit", "-q", "-m", "seed"], cwd=workdir, capture_output=True)
+    with open(os.path.join(workdir, "uncommitted.txt"), "w", encoding="utf-8") as handle:
+        handle.write("dirty\n")
+    return workdir
+
+
+def action_lines(text, pattern):
+    """Lines that really execute something, ignoring echoes/rem comments used for help text."""
+    hits = []
+    for number, line in enumerate(text.splitlines(), 1):
+        stripped = line.strip()
+        lowered = stripped.lower()
+        if not lowered or lowered.startswith(("rem ", "::", "#")):
+            continue
+        first = lowered.split(" ")[0]
+        if first in ("echo", "echo.", "printf") or lowered.startswith(("echo ", "rem", "::")):
+            continue
+        if re.search(pattern, lowered):
+            hits.append(f"{number}: {stripped}")
+    return hits
+
+
 def git_head():
     proc = subprocess.run(["git", "rev-parse", "HEAD"], cwd=REPO,
                           capture_output=True, text=True, encoding="utf-8")
@@ -133,6 +164,23 @@ if os.path.exists(BAT) and os.path.exists(SH):
     check("check" in bat_text and "check" in sh_text, "both entries document the check mode")
     check("漂移" in bat_text and "漂移" in sh_text, "both entries guard the embedded-copy drift")
 
+print("\n=== Publishing semantics: the script must never commit on your behalf ===")
+if os.path.exists(BAT) and os.path.exists(SH):
+    bat_text = open(BAT, encoding="utf-8", errors="replace").read()
+    sh_text = open(SH, encoding="utf-8", errors="replace").read()
+    # Help text may *mention* `git add -A`; only an executed line would re-create the
+    # meaningless "chore(deploy): update Web UI / PWA assets" mega-commit.
+    for name, text in (("deploy-pages.bat", bat_text), ("deploy-pages.sh", sh_text)):
+        staging = action_lines(text, r"git\s+add\b")
+        committing = action_lines(text, r"git\s+commit\b")
+        check(not staging, f"{name} does not stage files itself", str(staging[:3]))
+        check(not committing, f"{name} does not commit itself", str(committing[:3]))
+        check("git status --porcelain" in text, f"{name} requires a committed work tree")
+        check("publish" in text, f"{name} offers a non-interactive publish mode")
+        check("已同步" in text, f"{name} skips pushing when already in sync")
+    check("确认推送" in bat_text and "确认推送" in sh_text,
+          "both entries ask for confirmation before pushing (default: cancel)")
+
 print("\n=== Negative path: a failing gate must exit non-zero ===")
 git_ok = subprocess.run(["git", "--version"], capture_output=True).returncode == 0
 if os.name == "nt" and git_ok:
@@ -161,6 +209,26 @@ if bash and git_ok:
 elif not bash:
     print("  SKIP: no bash available for the .sh cases")
 
+print("\n=== A dirty work tree must block publishing, before any heavy test runs ===")
+if git_ok:
+    if os.name == "nt":
+        workdir = committed_temp_repo(BAT)
+        if workdir:
+            code, out = run([os.path.join(workdir, "deploy-pages.bat"), "publish"], cwd=workdir)
+            check(code == 1, "deploy-pages.bat publish refuses an uncommitted work tree",
+                  f"(got {code})")
+            check("不会代为提交" in out, "and says so without committing anything")
+            check("[1/5]" not in out, "the pre-check stops before the slow suites")
+            shutil.rmtree(workdir, ignore_errors=True)
+    if bash:
+        workdir = committed_temp_repo(SH)
+        if workdir:
+            code, out = run([bash, "deploy-pages.sh", "publish"], cwd=workdir)
+            check(code == 1, "deploy-pages.sh publish refuses an uncommitted work tree",
+                  f"(got {code})")
+            check("不会代为提交" in out, "and says so without committing anything")
+            shutil.rmtree(workdir, ignore_errors=True)
+
 print("\n=== Positive path: check mode is a real gate and stays side-effect free ===")
 if os.environ.get("DEPLOY_GATE_NO_RECURSION_CHILD") == "1":
     print("  SKIP: invoked from inside a gate run, not re-entering the gate")
@@ -171,7 +239,7 @@ else:
         code, out = run([BAT, "check"], cwd=REPO)
         check(code == 0, "deploy-pages.bat check passes on the committed tree",
               out[-400:])
-        check("check 模式" in out and "跳过提交与推送" in out, "check mode reports that it skipped publishing")
+        check("check 模式" in out and "不推送" in out, "check mode states that it does not push")
     code, out = run([bash, SH, "check"], cwd=REPO) if bash else (None, "")
     if bash:
         check(code == 0, "deploy-pages.sh check passes on the committed tree", out[-400:])
