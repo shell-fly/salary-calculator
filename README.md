@@ -232,6 +232,25 @@ http(s); opening `index.html` via `file://` still works as a full offline single
 
 ---
 
+## 📦 打包 Release 资产 / Package Release Assets
+
+一个命令产出可挂到 GitHub Releases / Gitee 发行版的「下载即运行」文件（纯本地，不代提交、不自动打 tag）：
+
+```bash
+# Windows
+release.bat v3.11
+# macOS / Linux / Termux
+bash release.sh v3.11
+```
+
+产出到 `dist/`：
+- `工资计算器（中国）_v3.11.html` — 单文件免安装，任意设备双击用浏览器打开即可（离线、零依赖）。
+- `工资计算器（中国）_v3.11.zip` — 完整发行包（Web + CLI + 配置 + 运行脚本 + LICENSE）。
+
+脚本会先复用发布门禁（内联一致性 + 计算引擎/Excel/CLI 断言），通过后打印两平台上传步骤与可直接粘贴的 Release 文案。加 `--fast` 可跳过重型门禁（仅供调试）。`dist/` 已被 `.gitignore` 忽略。
+
+---
+
 ## 📚 文档 / Docs
 
 - [`docs/superpowers/specs/2026-10-04-product-naming-design.md`](docs/superpowers/specs/2026-10-04-product-naming-design.md) — 正式定名与文档口径 / product naming decision
