@@ -36,11 +36,18 @@ def check(ok, msg, detail=""):
 
 def run_cli(answers):
     """Drive the interactive CLI with a scripted stdin; return (returncode, stdout, stderr)."""
+    env = os.environ.copy()
+    # Force the child to emit UTF-8 regardless of the host console codepage. On a GBK/cp936
+    # Windows console Python would otherwise encode the CLI's Chinese output as cp936 while the
+    # parent decodes it as UTF-8 below, turning it into mojibake and failing the Chinese-substring
+    # assertions even though the numbers still match (a false failure, not a real regression).
+    env["PYTHONUTF8"] = "1"
+    env["PYTHONIOENCODING"] = "utf-8"
     proc = subprocess.run(
         [sys.executable, CLI],
         input="\n".join(answers) + "\n",
         capture_output=True, text=True, encoding="utf-8", errors="replace",
-        cwd=HERE,
+        cwd=HERE, env=env,
     )
     return proc.returncode, proc.stdout or "", proc.stderr or ""
 
