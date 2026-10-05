@@ -60,7 +60,7 @@
 ## 6. 验证
 
 - `python -m py_compile src/salary_calculator.py` 通过；`src/salary_calculator.py` 行数已由 v1 时期的 833 行增长到 **963 行**（v3.5 Excel 报表层 856 → v3.6 申报基数 905 → v3.7 医疗定额 909 → v3.8 逐月薪资 963 行），引用行数的文档均已同步。
-- `node web/test-compute.js`：全部断言通过（v3.1 后 157 → v3.2 后 191 → v3.3 后 277 → v3.4 后 316 → v3.6 后 345 → v3.7 后 361 → v3.8 后 378 → v3.9 后 379 条）；另有 `src/test_xlsx_writer.py` 51 条、`src/test_cli_smoke.py`（v3.6 新增）26 条、`src/test_deploy_gate.py`（v3.9 新增，v3.10 扩充至 37 条），共 **493 条**。
+- `node web/test-compute.js`：全部断言通过（v3.1 后 157 → v3.2 后 191 → v3.3 后 277 → v3.4 后 316 → v3.6 后 345 → v3.7 后 361 → v3.8 后 378 → v3.9 后 379 条）；另有 `src/test_xlsx_writer.py` 51 条、`src/test_cli_smoke.py`（v3.6 新增）26 条、`src/test_deploy_gate.py`（v3.9 新增，v3.10 扩充至 38 条），共 **494 条**。
 - `manifest.webmanifest` JSON 可解析，`name` = 工资计算器（中国）。
 - 浏览器端到端打开 `web/index.html`：`document.title` = 工资计算器（中国），Vue 正常渲染，控制台零消息，`file://` 下 SW 未注册且无报错；上海 2026 / 月薪 30000 / 公积金 7% → 第 1 月到手 24157.50、五险一金 5250.00，与 Python 口径一致。
 - 文本一致性扫描：docs 与界面文件中已无"中国工资计算器 / 上海工资计算器"作项目名残留（`shanghai_config.json` 内部注释与历史 spec/plan 除外）。

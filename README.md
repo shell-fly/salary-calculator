@@ -164,7 +164,7 @@ china-salary-calculator/
 node web/test-compute.js            # 379 条断言：JS 与 Python 计算一致 + 内联副本未漂移
 python src/test_xlsx_writer.py      # 51 条契约断言，含“CLI 与网页 Excel 逐字节一致”
 python src/test_cli_smoke.py        # 26 条 CLI 端到端断言（驱动完整 main()，含申报基数、医疗定额、逐月薪资与反推）
-python src/test_deploy_gate.py      # 37 条门禁守卫：检查失败必须非零退出、不代提交、check 模式零副作用
+python src/test_deploy_gate.py      # 38 条门禁守卫：检查失败必须非零退出、不代提交、check 模式零副作用
 ```
 
 The JS engine is numerically equivalent to the Python CLI; the .xlsx writer is a byte-for-byte
