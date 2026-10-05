@@ -147,6 +147,15 @@ offenders = lint_no_block_scoped_exit(BAT) if os.path.exists(BAT) else ["file mi
 check(not offenders, "no `exit /b` inside a cmd block (such exits return 0)",
       str(offenders[:3]))
 
+# `something & goto :eof` leaves the previous errorlevel in place when it returns to the
+# caller, so a skipped optional remote used to abort a publish that had already succeeded.
+inline_jump = []
+if os.path.exists(BAT):
+    inline_jump = action_lines(open(BAT, encoding="utf-8", errors="replace").read(),
+                               r"&\s*(goto|exit)\b")
+check(not inline_jump, "no `& goto`/`& exit` inline groupings (they leak errorlevel)",
+      str(inline_jump[:3]))
+
 print("\n=== Gate wording: never quote a fact the gate did not measure ===")
 if os.path.exists(BAT) and os.path.exists(SH):
     bat_text = open(BAT, encoding="utf-8", errors="replace").read()

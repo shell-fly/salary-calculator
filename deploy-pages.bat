@@ -248,11 +248,17 @@ echo   OK  CLI 端到端冒烟测试通过(覆盖申报基数、医疗定额、�
 exit /b 0
 
 :push
+rem 未配置该远程时必须返回 0:用 `goto :eof` 直接退出子例程会把上一步的 errorlevel 1 带给调用方,
+rem 导致 target=both 在 origin 已推成之后仍然误报失败退出。
 git remote get-url %1 >nul 2>&1
-if errorlevel 1 (echo   跳过: 未配置远程 '%1' & goto :eof)
+if not errorlevel 1 goto :push_run
+echo   跳过: 未配置远程 '%1'
+exit /b 0
+
+:push_run
 echo   推送到 %1 ^(!BRANCH!^)...
 git push -u %1 !BRANCH!
 set "ERR=%ERRORLEVEL%"
 if not "%ERR%"=="0" echo   失败: 推送到 %1 未成功 ^(exit %ERR%^)
 if not "%ERR%"=="0" exit /b 1
-goto :eof
+exit /b 0
