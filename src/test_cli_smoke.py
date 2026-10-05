@@ -1,4 +1,7 @@
 # -*- coding: utf-8 -*-
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 bob3703
+# Licensed under the Apache License, Version 2.0. See the LICENSE file for the full text.
 """
 test_cli_smoke.py — end-to-end guard for the interactive CLI (`run.bat` / `run.sh` entry 1).
 

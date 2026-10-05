@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2026 bob3703
+// Licensed under the Apache License, Version 2.0. See the LICENSE file for the full text.
 /* China Salary Calculator — Service Worker
  * Strategy: precache the self-contained app shell; cache-first at runtime with
  * a background refresh for navigations so the deployed PWA works fully offline

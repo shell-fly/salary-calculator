@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2026 bob3703
+// Licensed under the Apache License, Version 2.0. See the LICENSE file for the full text.
 /**
  * test-compute.js — Node.js ES module test for compute.js
  * Run: node test-compute.js  (requires package.json with "type":"module")

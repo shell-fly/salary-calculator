@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2026 bob3703
+// Licensed under the Apache License, Version 2.0. See the LICENSE file for the full text.
 // web/inline-compute.mjs — build helper: inline the calculation engine into web/index.html
 //
 // The Web UI ships as one self-contained file, so the engine exists twice: as an ES module

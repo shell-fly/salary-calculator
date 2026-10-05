@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2026 bob3703
+// Licensed under the Apache License, Version 2.0. See the LICENSE file for the full text.
 // web/inline-xlsx.mjs — build helper: inline the Excel writer + report builder into web/index.html
 //
 // The Web UI ships as one self-contained file, so the Excel layer exists twice: as ES modules

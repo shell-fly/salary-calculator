@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2026 bob3703
+// Licensed under the Apache License, Version 2.0. See the LICENSE file for the full text.
 /**
  * xlsx-sample.mjs — cross-engine probe for web/xlsx-writer.js.
  *
