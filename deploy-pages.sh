@@ -27,8 +27,8 @@ if command -v node >/dev/null 2>&1; then
   node web/inline-compute.mjs >/dev/null || { echo "  ✗ compute.js 与 index.html 内嵌引擎不一致"; exit 1; }
   node web/inline-xlsx.mjs  >/dev/null || { echo "  ✗ xlsx 引擎与 index.html 内嵌副本不一致"; exit 1; }
   echo "  ✓ 内嵌副本已与源文件同步"
-  node web/test-compute.js >/dev/null || { echo "  ✗ 计算引擎断言未通过（345 条，含内联防漂移检查）"; exit 1; }
-  echo "  ✓ 计算引擎 345 条断言通过"
+  node web/test-compute.js >/dev/null || { echo "  ✗ 计算引擎断言未通过（378 条，含内联防漂移检查）"; exit 1; }
+  echo "  ✓ 计算引擎 378 条断言通过"
 else
   echo "  ! 未检测到 node,跳过内联一致性校验。改过 config.json 或 web/*.js 后必须手动重跑内联脚本。"
 fi
@@ -36,7 +36,7 @@ if command -v python3 >/dev/null 2>&1; then
   python3 src/test_xlsx_writer.py >/dev/null || { echo "  ✗ xlsx 契约测试未通过"; exit 1; }
   echo "  ✓ xlsx 契约测试通过（CLI 与网页 Excel 逐字节一致）"
   python3 src/test_cli_smoke.py >/dev/null || { echo "  ✗ CLI 端到端冒烟测试未通过"; exit 1; }
-  echo "  ✓ CLI 端到端冒烟测试通过（17 条，覆盖申报基数与反推路径）"
+  echo "  ✓ CLI 端到端冒烟测试通过（26 条，覆盖申报基数、医疗定额、逐月薪资与反推）"
 else
   echo "  ! 未检测到 python3,跳过 xlsx 契约测试与 CLI 冒烟测试"
 fi

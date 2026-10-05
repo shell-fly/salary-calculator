@@ -42,6 +42,11 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
 .app-header h1 { margin: 0; font-size: 20px; font-weight: 600; letter-spacing: 1px; }
 .app-header .subtitle { margin: 4px 0 0; font-size: 12px; opacity: .88; }
 @media (max-width: 768px) { .app-header { padding: 12px 14px; } .app-header h1 { font-size: 17px; } }
+.month-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin-top: 6px; }
+.month-cell { display: flex; align-items: center; gap: 4px; font-size: 12px; margin: 0; }
+.month-cell span { flex: 0 0 auto; color: #606266; }
+.month-cell input { width: 100%; min-width: 0; }
+@media (max-width: 768px) { .month-grid { grid-template-columns: repeat(2, 1fr); } }
 .main { display: flex; gap: 16px; padding: 16px; max-width: 1400px; margin: 0 auto; }
 .panel-left { flex: 0 0 38%; background: #fff; border-radius: 10px; padding: 16px; box-shadow: 0 1px 4px rgba(0,0,0,0.06); }
 .panel-right { flex: 1; background: #fff; border-radius: 10px; padding: 16px; box-shadow: 0 1px 4px rgba(0,0,0,0.06); }
@@ -114,6 +119,27 @@ input[type="number"] { width: 120px; padding: 4px 8px; border: 1px solid #ccc; b
     <div class="panel-left">
       <h4 style="margin-bottom:12px;">参数设置</h4>
       <label>税前月薪 <input type="number" v-model.number="params.salary" min="0" step="100"></label>
+
+      <!-- Per-month salary list -->
+      <div style="margin-top:8px;">
+        <label style="display:flex;align-items:center;gap:6px;">
+          <input type="checkbox" v-model="params.useMonthly" style="width:auto;"> 各月工资不同（提成/发薪不均）
+        </label>
+        <p v-if="!params.useMonthly" style="font-size:11px;color:#909399;margin:4px 0 0;">默认 12 个月同薪；累计预扣按每月同值推算。</p>
+        <template v-if="params.useMonthly">
+          <div class="month-grid">
+            <label v-for="i in 12" :key="'m'+i" class="month-cell">
+              <span>{{ i }}月</span>
+              <input type="number" min="0" step="100" :placeholder="params.salary"
+                     :value="params.monthlySalaries[i-1]"
+                     @input="setMonthlySalary(i-1, $event.target.valueAsNumber)">
+            </label>
+          </div>
+          <p style="font-size:11px;color:#909399;margin:4px 0 0;">
+            留空 = 沿用税前月薪 {{ fmt(params.salary) }}；当前逐月合计 {{ fmt(monthlyTotal) }} 元/年，均值 {{ fmt(avgMonthlyGross) }} 元/月。累扣按实际逐月收入累加。
+          </p>
+        </template>
+      </div>
       <label>第几个月 <input type="number" v-model.number="params.month" min="1" max="12"></label>
       <label>公积金比例 {{ session ? session.housing_rate_min : '' }}%~{{ session ? session.housing_rate_max : '' }}%
         <input type="number" v-model.number="params.housingPct" :min="session ? session.housing_rate_min : 5" :max="session ? session.housing_rate_max : 12">
@@ -548,9 +574,12 @@ function createSession(cityCode, year, CFG) {
  * Compute a single month's detail under cumulative withholding.
  * socialBaseDict: {pension: clamped_value, medical: clamped_value, unemployment: clamped_value}
  * specialItems: [{key, amount, startMonth, endMonth}]
+ * prev (optional): {cumIncome, cumSocial, cumSpecial, cumTax} totals of the earlier months.
+ *   Passing it is what makes unequal monthly salaries correct; omitting it keeps the historic
+ *   single-salary shortcut (income = salary * monthNo).
  */
 function computeMonth(sess, monthNo, salary, socialBaseDict, housingBase,
-  specialItems, housingPct, extraPct, CFG) {
+  specialItems, housingPct, extraPct, CFG, prev = null) {
   const taxFreeMonthly = sess.taxFreeMonthly;
 
   const sbP = socialBaseDict.pension;
@@ -576,15 +605,16 @@ function computeMonth(sess, monthNo, salary, socialBaseDict, housingBase,
 
   // Cumulative withholding IIT
   const specialMonthly = monthlySpecial(monthNo, specialItems);
-  const cumIncome = salary * monthNo;
+  const cumIncome = prev ? prev.cumIncome + salary : salary * monthNo;
   const cumBase = taxFreeMonthly * monthNo;
-  const cumSocial = socialPTotal * monthNo;
-  const cumSpecial = specialMonthly * monthNo;
+  const cumSocial = prev ? prev.cumSocial + socialPTotal : socialPTotal * monthNo;
+  const cumSpecial = prev ? prev.cumSpecial + specialMonthly : specialMonthly * monthNo;
   const cumTaxable = cumIncome - cumBase - cumSocial - cumSpecial;
   const cumTax = calcCumulativeTax(cumTaxable, sess.taxBrackets);
 
-  const prevCumTaxable = cumTaxable - salary + taxFreeMonthly + socialPTotal + specialMonthly;
-  const prevCumTax = calcCumulativeTax(prevCumTaxable, sess.taxBrackets);
+  const prevCumTax = prev
+    ? prev.cumTax
+    : calcCumulativeTax(cumTaxable - salary + taxFreeMonthly + socialPTotal + specialMonthly, sess.taxBrackets);
   const monthTax = Math.max(0.0, cumTax - prevCumTax);
 
   const net = salary - socialPTotal - monthTax;
@@ -623,25 +653,48 @@ function declaredBase(declared, salary, month) {
 }
 
 /**
+ * Gross for one month when a 12-entry salary list is given.
+ * A missing / empty entry falls back to the base salary so a partially filled form still works;
+ * an explicit 0 means "no pay that month" and is kept.
+ */
+function monthGross(salaries, salary, month) {
+  if (!Array.isArray(salaries)) return salary;
+  const raw = salaries[month - 1];
+  if (raw === undefined || raw === null || raw === '') return salary;
+  const value = Number(raw);
+  return Number.isFinite(value) ? value : 0;
+}
+
+/**
  * Run 12 months using each month's own half-year bounds. Returns array of 12 dicts.
  * declared (optional): {social: [h1, h2], housing: [h1, h2]} contribution bases as
  * declared by the employer. Many companies declare the statutory lower bound instead of
  * the real salary, so the base must be overridable; it is still clamped to the policy range.
+ * salaries (optional): 12 monthly gross values (commission / bonus-heavy pay), overriding `salary`.
  */
-function computeYear(sess, salary, specialItems, housingPct, extraPct, CFG, declared) {
+function computeYear(sess, salary, specialItems, housingPct, extraPct, CFG, declared, salaries) {
   const results = [];
+  let prev = { cumIncome: 0, cumSocial: 0, cumSpecial: 0, cumTax: 0 };
   for (let m = 1; m <= 12; m++) {
+    const gross = monthGross(salaries, salary, m);
     const [plo, phi, mlo, mhi, ulo, uhi] = sess.socialBounds(m);
     const [hlo, hhi] = sess.housingBounds(m);
-    const sBase = declaredBase((declared || {}).social, salary, m);
-    const hBase = declaredBase((declared || {}).housing, salary, m);
+    const sBase = declaredBase((declared || {}).social, gross, m);
+    const hBase = declaredBase((declared || {}).housing, gross, m);
     const sb = {
       pension: clamp(sBase, plo, phi),
       medical: clamp(sBase, mlo, mhi),
       unemployment: clamp(sBase, ulo, uhi),
     };
     const hb = clamp(hBase, hlo, hhi);
-    results.push(computeMonth(sess, m, salary, sb, hb, specialItems, housingPct, extraPct, CFG));
+    const row = computeMonth(sess, m, gross, sb, hb, specialItems, housingPct, extraPct, CFG, prev);
+    results.push(row);
+    prev = {
+      cumIncome: prev.cumIncome + gross,
+      cumSocial: prev.cumSocial + row.social_p_total,
+      cumSpecial: prev.cumSpecial + row.special_monthly,
+      cumTax: row.cum_tax,
+    };
   }
   return results;
 }
@@ -1565,6 +1618,8 @@ const app = createApp({
       bonus: 0,
       targetNet: 0,
       useDeclared: false,
+      useMonthly: false,
+      monthlySalaries: [],
       declaredSocial1: 0,
       declaredSocial2: 0,
       declaredHousing1: 0,
@@ -1643,6 +1698,11 @@ const app = createApp({
       if (!v || v < 1) return 1;
       if (v > 12) return 12;
       return Math.floor(v);
+    }
+
+    // Per-month salary list: store '' for a blank box so the engine falls back to 税前月薪
+    function setMonthlySalary(idx, value) {
+      params.monthlySalaries[idx] = (value === null || Number.isNaN(value)) ? '' : value;
     }
     function getDeductionAmount(key) {
       const item = getDeductionItem(key);
@@ -1753,11 +1813,28 @@ const app = createApp({
       };
     });
 
+    // Computed: per-month gross list (blank entry = fall back to 税前月薪)
+    const salaryList = computed(() => {
+      if (!params.useMonthly) return null;
+      return Array.from({ length: 12 }, (_, i) => params.monthlySalaries[i]);
+    });
+
+    // Computed: average monthly gross — used by the bonus comparison, which is per-month based
+    const avgMonthlyGross = computed(() => {
+      if (!salaryList.value) return params.salary;
+      const vals = salaryList.value.map(v => (v === '' || v === null || v === undefined) ? params.salary : Number(v) || 0);
+      return vals.reduce((s, v) => s + v, 0) / 12;
+    });
+
+    // Computed: yearly total of the entered monthly grosses (blank = base salary)
+    const monthlyTotal = computed(() => avgMonthlyGross.value * 12);
+
     // Computed: months12
     const months12 = computed(() => {
       if (!session.value) return null;
       return computeYear(session.value, params.salary, activeSpecialItems.value,
-        params.housingPct, params.useExtra ? params.extraPct : 0, CFG, declaredBases.value);
+        params.housingPct, params.useExtra ? params.extraPct : 0, CFG, declaredBases.value,
+        salaryList.value);
     });
 
     // Computed: monthDetail
@@ -1769,7 +1846,7 @@ const app = createApp({
     // Computed: bonus comparison
     const bonusResult = computed(() => {
       if (!monthDetail.value || params.bonus <= 0) return null;
-      return compareBonus(params.salary, monthDetail.value.social_p_total,
+      return compareBonus(avgMonthlyGross.value, monthDetail.value.social_p_total,
         monthDetail.value.special_monthly, params.bonus, CFG);
     });
 
@@ -1937,7 +2014,7 @@ const app = createApp({
       deductionDefs, isDeductionEnabled, toggleDeduction, getDeductionAmount,
       getDeductionField, setDeductionField, clampMonth,
       availableYears, headerSubtitle, session, months12, monthDetail,
-      declaredBases, baseRanges,
+      declaredBases, baseRanges, salaryList, avgMonthlyGross, monthlyTotal, setMonthlySalary,
       activeSpecialItems, bonusResult, annualMedicalDeduction,
       settlementResult, settlementData,
       inverseResult, onInverseInput,

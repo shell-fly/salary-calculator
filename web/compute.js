@@ -231,9 +231,12 @@ export function createSession(cityCode, year, CFG) {
  * Compute a single month's detail under cumulative withholding.
  * socialBaseDict: {pension: clamped_value, medical: clamped_value, unemployment: clamped_value}
  * specialItems: [{key, amount, startMonth, endMonth}]
+ * prev (optional): {cumIncome, cumSocial, cumSpecial, cumTax} totals of the earlier months.
+ *   Passing it is what makes unequal monthly salaries correct; omitting it keeps the historic
+ *   single-salary shortcut (income = salary * monthNo).
  */
 export function computeMonth(sess, monthNo, salary, socialBaseDict, housingBase,
-  specialItems, housingPct, extraPct, CFG) {
+  specialItems, housingPct, extraPct, CFG, prev = null) {
   const taxFreeMonthly = sess.taxFreeMonthly;
 
   const sbP = socialBaseDict.pension;
@@ -259,15 +262,16 @@ export function computeMonth(sess, monthNo, salary, socialBaseDict, housingBase,
 
   // Cumulative withholding IIT
   const specialMonthly = monthlySpecial(monthNo, specialItems);
-  const cumIncome = salary * monthNo;
+  const cumIncome = prev ? prev.cumIncome + salary : salary * monthNo;
   const cumBase = taxFreeMonthly * monthNo;
-  const cumSocial = socialPTotal * monthNo;
-  const cumSpecial = specialMonthly * monthNo;
+  const cumSocial = prev ? prev.cumSocial + socialPTotal : socialPTotal * monthNo;
+  const cumSpecial = prev ? prev.cumSpecial + specialMonthly : specialMonthly * monthNo;
   const cumTaxable = cumIncome - cumBase - cumSocial - cumSpecial;
   const cumTax = calcCumulativeTax(cumTaxable, sess.taxBrackets);
 
-  const prevCumTaxable = cumTaxable - salary + taxFreeMonthly + socialPTotal + specialMonthly;
-  const prevCumTax = calcCumulativeTax(prevCumTaxable, sess.taxBrackets);
+  const prevCumTax = prev
+    ? prev.cumTax
+    : calcCumulativeTax(cumTaxable - salary + taxFreeMonthly + socialPTotal + specialMonthly, sess.taxBrackets);
   const monthTax = Math.max(0.0, cumTax - prevCumTax);
 
   const net = salary - socialPTotal - monthTax;
@@ -306,25 +310,48 @@ export function declaredBase(declared, salary, month) {
 }
 
 /**
+ * Gross for one month when a 12-entry salary list is given.
+ * A missing / empty entry falls back to the base salary so a partially filled form still works;
+ * an explicit 0 means "no pay that month" and is kept.
+ */
+export function monthGross(salaries, salary, month) {
+  if (!Array.isArray(salaries)) return salary;
+  const raw = salaries[month - 1];
+  if (raw === undefined || raw === null || raw === '') return salary;
+  const value = Number(raw);
+  return Number.isFinite(value) ? value : 0;
+}
+
+/**
  * Run 12 months using each month's own half-year bounds. Returns array of 12 dicts.
  * declared (optional): {social: [h1, h2], housing: [h1, h2]} contribution bases as
  * declared by the employer. Many companies declare the statutory lower bound instead of
  * the real salary, so the base must be overridable; it is still clamped to the policy range.
+ * salaries (optional): 12 monthly gross values (commission / bonus-heavy pay), overriding `salary`.
  */
-export function computeYear(sess, salary, specialItems, housingPct, extraPct, CFG, declared) {
+export function computeYear(sess, salary, specialItems, housingPct, extraPct, CFG, declared, salaries) {
   const results = [];
+  let prev = { cumIncome: 0, cumSocial: 0, cumSpecial: 0, cumTax: 0 };
   for (let m = 1; m <= 12; m++) {
+    const gross = monthGross(salaries, salary, m);
     const [plo, phi, mlo, mhi, ulo, uhi] = sess.socialBounds(m);
     const [hlo, hhi] = sess.housingBounds(m);
-    const sBase = declaredBase((declared || {}).social, salary, m);
-    const hBase = declaredBase((declared || {}).housing, salary, m);
+    const sBase = declaredBase((declared || {}).social, gross, m);
+    const hBase = declaredBase((declared || {}).housing, gross, m);
     const sb = {
       pension: clamp(sBase, plo, phi),
       medical: clamp(sBase, mlo, mhi),
       unemployment: clamp(sBase, ulo, uhi),
     };
     const hb = clamp(hBase, hlo, hhi);
-    results.push(computeMonth(sess, m, salary, sb, hb, specialItems, housingPct, extraPct, CFG));
+    const row = computeMonth(sess, m, gross, sb, hb, specialItems, housingPct, extraPct, CFG, prev);
+    results.push(row);
+    prev = {
+      cumIncome: prev.cumIncome + gross,
+      cumSocial: prev.cumSocial + row.social_p_total,
+      cumSpecial: prev.cumSpecial + row.special_monthly,
+      cumTax: row.cum_tax,
+    };
   }
   return results;
 }

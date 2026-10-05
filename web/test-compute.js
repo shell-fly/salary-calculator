@@ -555,6 +555,12 @@ assert(declaredInputs.length === 4, 'index.html exposes four declared-base input
 assert(declaredInputs.every((tag) => /step="1"/.test(tag)),
   'declared-base inputs use step="1" so statutory bounds stay valid');
 
+// The monthly-salary UI must stay wired to the engine (guards the feature end to end).
+assert(/v-model="params\.useMonthly"/.test(html), 'the UI exposes the 各月工资不同 toggle');
+assert(/v-for="i in 12"/.test(html), 'the UI renders twelve monthly salary inputs');
+assert(/computeYear\(session\.value,[\s\S]{0,220}?salaryList\.value\)/.test(html),
+  'the Web UI feeds the monthly salary list into computeYear');
+
 // =====================================================================
 // Test 13: fixed medical top-up per month (Beijing 大额医疗互助 3 元/月)
 // Beijing charges the employee 2% of the base PLUS 3 CNY per month; every other
@@ -583,6 +589,45 @@ assertClose(bjRows[6].medical_p, 603, 0.005, 'BJ M7 医疗 = 603 (fixed amount i
 // Shanghai must be untouched by the new field.
 assert(sessSH26.medical_fixed === 0, 'SH session medical_fixed = 0');
 assertClose(computeYear(sessSH26, 30000, [], 7, 0, CFG)[0].medical_p, 600, 0.005, 'SH M1 医疗 = 600 (no top-up)');
+
+// =====================================================================
+// Test 14: per-month gross salaries (the last income-calc feature gap)
+// Shanghai 2026: H1 social [7460,37302] housing [2690,37302]; H2 [7546,37731] / [2740,37731].
+// Employee rates 8% + 2% + 0.5% = 10.5%, housing 7%.
+// =====================================================================
+console.log('\n=== Per-month salary list ===');
+
+const monthly = [20000, 20000, 20000, 20000, 20000, 60000, 20000, 20000, 20000, 20000, 20000, 20000];
+const rowsM = computeYear(sessSH26, 20000, [], 7, 0, CFG, null, monthly);
+
+// Hand-computed cumulative withholding:
+// M1-M3: taxable 11500/month -> 3% -> 345 each, net 16155
+assertClose(rowsM[0].net, 16155, 0.01, 'monthly M1 到手 = 16155');
+// M4 pushes cumulative taxable to 46000 -> 10% bracket: 2080 - 1035 = 1045
+assertClose(rowsM[3].month_tax, 1045, 0.01, 'monthly M4 个税 = 1045（跨入 10% 档）');
+assertClose(rowsM[3].net, 15455, 0.01, 'monthly M4 到手 = 15455');
+// M6 pays 60000 but the base caps at 37302: social 3916.71 + fund round(2611.14)=2611 = 6527.71
+assertClose(rowsM[5].salary, 60000, 0.005, 'monthly M6 gross = 60000');
+assertClose(rowsM[5].sb_p, 37302, 0.005, 'monthly M6 养老基数封顶 = 37302');
+assertClose(rowsM[5].medical_p, 746.04, 0.005, 'monthly M6 医疗 = 37302*2% = 746.04');
+assertClose(rowsM[5].social_p_total, 6527.71, 0.005, 'monthly M6 五险一金 = 6527.71');
+assertClose(rowsM[5].month_tax, 4847.23, 0.01, 'monthly M6 个税 = 4847.23');
+assertClose(rowsM[5].net, 48625.06, 0.01, 'monthly M6 到手 = 48625.06');
+// M7 is in H2 (bounds rise) and still earns 20000 -> base unchanged, taxable +11500
+assertClose(rowsM[6].sb_p, 20000, 0.005, 'monthly M7 base = 20000 under H2 bounds');
+assertClose(rowsM[6].net, 15350, 0.01, 'monthly M7 到手 = 15350');
+
+// A flat list must reproduce the single-salary behaviour exactly.
+const rowsFlat = computeYear(sessSH26, 20000, [], 7, 0, CFG, null, new Array(12).fill(20000));
+const rowsNone = computeYear(sessSH26, 20000, [], 7, 0, CFG);
+assert(rowsFlat.every((r, i) => r.net === rowsNone[i].net),
+  'a flat salary list is equivalent to omitting the list');
+
+// The list and a declared base compose: declared wins for the base, the list for the gross.
+const rowsBoth = computeYear(sessSH26, 20000, [], 7, 0, CFG,
+  { social: [10000, 10000], housing: [10000, 10000] }, monthly);
+assertClose(rowsBoth[5].salary, 60000, 0.005, 'compose: M6 gross still comes from the list');
+assertClose(rowsBoth[5].sb_p, 10000, 0.005, 'compose: M6 base comes from the declared value');
 
 // =====================================================================
 // Summary

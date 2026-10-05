@@ -43,8 +43,8 @@ def run_cli(answers):
 
 
 # Common answer sheet:
-# city(default 上海) year(default) 月薪 第几个月 公积金比例 补充公积金
-HEAD = ["", "", "30000", "", "7", "n"]
+# city(default 上海) year(default) 月薪 第几个月 12 月同薪? 公积金比例 补充公积金
+HEAD = ["", "", "30000", "", "y", "7", "n"]
 # 七项专项附加扣除全部不启用 → 年终奖 → 查看全年 → 汇算 → 不导出 → 不反推
 TAIL = ["n"] * 7 + ["0", "y", "n", "0", "n"]
 
@@ -81,12 +81,23 @@ check("25,000" in out or "300,000" in out, "inverse reaches the requested take-h
 
 print("\n=== CLI: Beijing fixed medical top-up (2% + 3 CNY/month) ===")
 # city 2 = 北京, year default, 月薪 30000, 第 1 月, 公积金 12%, 无补充公积金, 无自定义基数
-code, out, err = run_cli(["2", "", "30000", "", "12", "n", "n"] + TAIL)
+code, out, err = run_cli(["2", "", "30000", "", "y", "12", "n", "n"] + TAIL)
 check(code == 0, "Beijing run exits 0", f"(code={code}, err={err[-300:]})")
 check("603.00" in out, "Beijing 医疗个人 = 603.00（600 + 3 元定额）")
 check("6,753.00" in out, "Beijing 五险一金个人合计 = 6,753.00")
 check("22,699.59" in out, "Beijing M1 到手 = 22,699.59")
 # Same numbers as web/test-compute.js Test 13: matching literals are the cross-engine proof.
+
+print("\n=== CLI: per-month salary list (commission-style pay) ===")
+# 上海 2026：M1-M5 = 20000，M6 = 60000（基数封顶 37302），M7-M12 = 20000；查看全年表
+code, out, err = run_cli(["", "", "20000", "", "n"]
+                         + ["20000"] * 5 + ["60000"] + ["20000"] * 6
+                         + ["7", "n", "n"] + ["n"] * 7 + ["0", "y", "n", "0", "n"])
+check(code == 0, "salary-list run exits 0", f"(code={code}, err={err[-300:]})")
+check("Traceback" not in err, "salary-list run raises no traceback", err[-300:])
+check("48,625.06" in out, "M6 到手 = 48,625.06（累计预扣按真实逐月收入）")
+check("4,847.23" in out, "M6 本月个税 = 4,847.23（累计预扣按真实逐月收入）")
+check("15,455.00" in out, "M4 到手 = 15,455.00（累计跨入 10% 档）")
 
 print("\n============================================")
 if FAILURES:

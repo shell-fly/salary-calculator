@@ -215,11 +215,14 @@ def monthly_special(month, items):
 
 
 def compute_month(sess, month_no, salary, social_base_dict, housing_base,
-                  special_items, housing_pct, extra_pct):
+                  special_items, housing_pct, extra_pct, prev=None):
     """
     Compute month_no's detail under cumulative withholding.
     social_base_dict: {"pension": lo/hi-clamped, "medical": ..., "unemployment": ...}
     special_items: list of (key, amount, start_month, end_month)
+    prev (optional): {"cum_income", "cum_social", "cum_special", "cum_tax"} totals of the
+      earlier months. Passing it is what makes unequal monthly salaries correct; omitting it
+      keeps the historic single-salary shortcut (income = salary * month_no).
     """
     sb_p = social_base_dict["pension"]
     sb_m = social_base_dict["medical"]
@@ -244,15 +247,23 @@ def compute_month(sess, month_no, salary, social_base_dict, housing_base,
 
     # Cumulative withholding IIT
     special_m = monthly_special(month_no, special_items)
-    cum_income = salary * month_no
+    if prev is None:
+        cum_income = salary * month_no
+        cum_social = social_p_total * month_no
+        cum_special = special_m * month_no
+    else:
+        cum_income = prev["cum_income"] + salary
+        cum_social = prev["cum_social"] + social_p_total
+        cum_special = prev["cum_special"] + special_m
     cum_base = TAX_FREE_MONTHLY * month_no
-    cum_social = social_p_total * month_no
-    cum_special = special_m * month_no
     cum_taxable = cum_income - cum_base - cum_social - cum_special
     cum_tax = calc_cumulative_tax(cum_taxable)
 
-    prev_cum_taxable = cum_taxable - salary + TAX_FREE_MONTHLY + social_p_total + special_m
-    prev_cum_tax = calc_cumulative_tax(prev_cum_taxable)
+    if prev is None:
+        prev_cum_taxable = cum_taxable - salary + TAX_FREE_MONTHLY + social_p_total + special_m
+        prev_cum_tax = calc_cumulative_tax(prev_cum_taxable)
+    else:
+        prev_cum_tax = prev["cum_tax"]
     month_tax = max(0.0, cum_tax - prev_cum_tax)
 
     net = salary - social_p_total - month_tax
@@ -292,7 +303,27 @@ def declared_base(declared, salary, month):
     return value if value > 0 else salary
 
 
-def compute_year(sess, salary, special_items, housing_pct, extra_pct, declared=None):
+def month_gross(salaries, salary, month):
+    """
+    Gross for one month when a 12-entry salary list is given.
+    A missing / empty entry falls back to the base salary (a partially filled form still works);
+    an explicit 0 means "no pay that month" and is kept.
+    """
+    if not salaries:
+        return salary
+    idx = int(month) - 1
+    if idx >= len(salaries):
+        return salary
+    value = salaries[idx]
+    if value is None or value == "":
+        return salary
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return 0.0
+
+
+def compute_year(sess, salary, special_items, housing_pct, extra_pct, declared=None, salaries=None):
     """
     Run 12 months using each month's own half-year bounds. Returns list[dict].
 
@@ -300,23 +331,35 @@ def compute_year(sess, salary, special_items, housing_pct, extra_pct, declared=N
     actually declared by the employer. Many companies declare the statutory lower bound
     instead of the real salary, so the base must be overridable; it is still clamped to
     the policy range of the selected city/year/half.
+
+    salaries (optional): 12 monthly gross values for commission / bonus-heavy pay, which
+    override `salary` month by month (the declared base follows each month's own gross).
     """
     results = []
     social_declared = (declared or {}).get("social")
     housing_declared = (declared or {}).get("housing")
+    prev = {"cum_income": 0.0, "cum_social": 0.0, "cum_special": 0.0, "cum_tax": 0.0}
     for m in range(1, 13):
+        gross = month_gross(salaries, salary, m)
         plo, phi, mlo, mhi, ulo, uhi = sess.social_bounds(m)
         hlo, hhi = sess.housing_bounds(m)
-        s_base = declared_base(social_declared, salary, m)
-        h_base = declared_base(housing_declared, salary, m)
+        s_base = declared_base(social_declared, gross, m)
+        h_base = declared_base(housing_declared, gross, m)
         sb = {
             "pension": clamp(s_base, plo, phi),
             "medical": clamp(s_base, mlo, mhi),
             "unemployment": clamp(s_base, ulo, uhi),
         }
         hb = clamp(h_base, hlo, hhi)
-        results.append(compute_month(sess, m, salary, sb, hb,
-                                     special_items, housing_pct, extra_pct))
+        row = compute_month(sess, m, gross, sb, hb,
+                            special_items, housing_pct, extra_pct, prev)
+        results.append(row)
+        prev = {
+            "cum_income": prev["cum_income"] + gross,
+            "cum_social": prev["cum_social"] + row["social_p_total"],
+            "cum_special": prev["cum_special"] + row["special_monthly"],
+            "cum_tax": row["cum_tax"],
+        }
     return results
 
 
@@ -799,6 +842,14 @@ def main():
 
     month_no = ask_int("\n这是年度内第几个月的工资？（1~12，默认 1）：", default=1, lo=1, hi=12)
 
+    # Per-month salary list: commission / 提成 / 发薪不均时，逐月输入（否则全年同值）
+    salaries = None
+    if not ask_yn("\n这 12 个月的税前工资是否完全相同？不同请选 n (y/n，默认 y): "):
+        print(f"  请依次输入各月税前工资（直接回车则沿用默认 {fmt(salary)} 元）：")
+        salaries = [ask_float(f"   第 {mi:2d} 个月（元）：", default=salary, lo=0, hi=10_000_000)
+                    for mi in range(1, 13)]
+        print(f"  已录入逐月工资：合计 {fmt(sum(salaries))} 元/年，均值 {fmt(sum(salaries) / 12.0)} 元/月。")
+
     print(f"\n【公积金】{sess.city_name} {year} 年度缴存比例区间为 "
           f"{sess.housing_rate_min}%~{sess.housing_rate_max}%（整数值）"
           + (f"；叠加补充公积金最高可达 {sess.housing_rate_max}+{sess.extra_max}"
@@ -841,15 +892,16 @@ def main():
     # Compute single month using that month's half-year bounds
     plo, phi, mlo, mhi, ulo, uhi = sess.social_bounds(month_no)
     hlo, hhi = sess.housing_bounds(month_no)
-    s_base = declared_base((declared or {}).get("social"), salary, month_no)
-    h_base = declared_base((declared or {}).get("housing"), salary, month_no)
+    month_salary = month_gross(salaries, salary, month_no)
+    s_base = declared_base((declared or {}).get("social"), month_salary, month_no)
+    h_base = declared_base((declared or {}).get("housing"), month_salary, month_no)
     sb = {"pension": clamp(s_base, plo, phi),
           "medical": clamp(s_base, mlo, mhi),
           "unemployment": clamp(s_base, ulo, uhi)}
     hb = clamp(h_base, hlo, hhi)
-    r = compute_month(sess, month_no, salary, sb, hb, special_items, housing_pct, extra_pct)
+    r = compute_month(sess, month_no, month_salary, sb, hb, special_items, housing_pct, extra_pct)
 
-    src = "单位申报基数" if declared else "税前月薪"
+    src = "单位申报基数" if declared else ("该月实际工资" if salaries else "税前月薪")
     capped = "" if (s_base == sb["pension"] and s_base == sb["medical"]
                     and s_base == sb["unemployment"] and h_base == hb) else "（超出政策区间，已按上下限取限）"
     print(f"\n【缴费基数核对】按{src}：社保 养老{fmt(sb['pension'])}/医疗{fmt(sb['medical'])}/"
@@ -862,10 +914,12 @@ def main():
                         default=0, lo=0, hi=100_000_000)
     special_m_for_bonus = monthly_special(month_no, special_items)
     if bonus_q > 0:
-        show_bonus_compare(sess, salary, r["social_p_total"], special_m_for_bonus, bonus_q)
+        # With a salary list the bonus is compared against the average month (the table is per-month).
+        show_bonus_compare(sess, month_salary if not salaries else sum(salaries) / 12.0,
+                           r["social_p_total"], special_m_for_bonus, bonus_q)
 
     # Full year
-    months_12 = compute_year(sess, salary, special_items, housing_pct, extra_pct, declared)
+    months_12 = compute_year(sess, salary, special_items, housing_pct, extra_pct, declared, salaries)
     if ask_yn("\n是否查看全年 1~12 月逐月个税与到手工资演化？ (y/n，默认 n): "):
         show_yearly_table(sess, months_12)
 

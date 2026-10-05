@@ -37,8 +37,8 @@ if errorlevel 1 (
   if errorlevel 1 (echo   失败: xlsx 引擎与 index.html 内嵌副本不一致 & exit /b 1)
   echo   OK  内嵌副本已与源文件同步
   node web\test-compute.js >nul 2>&1
-  if errorlevel 1 (echo   失败: 计算引擎断言未通过（345 条，含内联防漂移检查）& exit /b 1)
-  echo   OK  计算引擎 345 条断言通过
+  if errorlevel 1 (echo   失败: 计算引擎断言未通过（378 条，含内联防漂移检查）& exit /b 1)
+  echo   OK  计算引擎 378 条断言通过
 )
 where python >nul 2>&1
 if errorlevel 1 (
@@ -49,7 +49,7 @@ if errorlevel 1 (
   echo   OK  xlsx 契约测试通过（CLI 与网页 Excel 逐字节一致）
   python src\test_cli_smoke.py >nul 2>&1
   if errorlevel 1 (echo   失败: CLI 端到端冒烟测试未通过 & exit /b 1)
-  echo   OK  CLI 端到端冒烟测试通过（17 条，覆盖申报基数与反推路径）
+  echo   OK  CLI 端到端冒烟测试通过（26 条，覆盖申报基数、医疗定额、逐月薪资与反推）
 )
 
 echo [3/5] 检查 git 远程...
