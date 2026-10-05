@@ -1,0 +1,69 @@
+name: Release
+
+# Tag-triggered auto-release: push a vX.Y[.Z] tag -> drift-check -> package ->
+# GitHub Release (built-in gh) + optional Gitee 发行版 (soft-fail).
+# Requires repo secret GITEE_TOKEN to publish to Gitee; absent = GitHub only.
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    env:
+      TAG: ${{ github.ref_name }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Setup python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Inline drift check
+        run: |
+          node web/inline-config.mjs
+          node web/inline-compute.mjs
+          node web/inline-xlsx.mjs
+          if ! git diff --exit-code -- web/index.html; then
+            echo "::error::内嵌副本漂移：源文件改了却未重跑内联。先本地跑 deploy-pages.bat check 再打 tag。"
+            exit 1
+          fi
+
+      - name: Package dist (fast)
+        run: python src/release.py "$TAG" --fast --notes-file dist/RELEASE_NOTES.md
+        env:
+          CSRELEASE_ALLOW_DIRTY: "1"
+
+      - name: Publish GitHub Release (create or clobber-overwrite)
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create "$TAG" dist/*.html dist/*.zip \
+            --title "工资计算器（中国）$TAG" --notes-file dist/RELEASE_NOTES.md \
+          || { gh release upload "$TAG" dist/*.html dist/*.zip --clobber; \
+               gh release edit "$TAG" --title "工资计算器（中国）$TAG" --notes-file dist/RELEASE_NOTES.md; }
+
+      - name: Publish Gitee 发行版 (soft-fail)
+        if: env.GITEE_TOKEN != ''
+        continue-on-error: true
+        env:
+          GITEE_TOKEN: ${{ secrets.GITEE_TOKEN }}
+          GITEE_OWNER: bob3703
+          GITEE_REPO: salary-calculator
+        run: |
+          python src/gitee_release.py delete --tag "$TAG" || true
+          python src/gitee_release.py publish --tag "$TAG" \
+            --title "工资计算器（中国）$TAG" \
+            --notes-file dist/RELEASE_NOTES.md \
+            --assets dist/*.html dist/*.zip

@@ -126,6 +126,19 @@ def test_notes_file_written_and_absent_without_flag():
     shutil.rmtree(os.path.join(root, "dist"), ignore_errors=True)
 
 
+def test_release_workflow_wired():
+    root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    wf = os.path.join(root, ".github", "workflows", "release.yml")
+    assert os.path.isfile(wf), "release.yml 不存在"
+    txt = open(wf, encoding="utf-8").read()
+    for needle in ["tags:", "'v*'", "node web/inline-config.mjs",
+                   "git diff --exit-code -- web/index.html", "--fast",
+                   "--notes-file", "gh release create", "--clobber",
+                   "gitee_release.py publish", "continue-on-error",
+                   "env.GITEE_TOKEN", "contents: write"]:
+        assert needle in txt, "release.yml 缺少: " + needle
+
+
 def run_suite():
     fns = [v for k, v in sorted(globals().items()) if k.startswith("test_")]
     fails = 0
