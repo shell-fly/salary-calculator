@@ -150,7 +150,7 @@ china-salary-calculator/
 ├── config.json                   # 8 城 × 2023–2026 参数（税率/专项附加，CLI 与 Web 共用）
 ├── run.bat                       # Windows 双菜单入口（CLI / Web）
 ├── run.sh                        # macOS / Linux / Termux 双菜单入口
-├── deploy-pages.bat / .sh        # 一键发布门禁（带 check 参数则只校验，不提交不推送）
+├── deploy-pages.bat / .sh        # 发布门禁：check 只校验 / publish 免交互推送 / 裸跑为确认制推送
 └── docs/                         # 定名说明、变更记录、口径比对、设计与实现文档
 ```
 
@@ -164,7 +164,7 @@ china-salary-calculator/
 node web/test-compute.js            # 379 条断言：JS 与 Python 计算一致 + 内联副本未漂移
 python src/test_xlsx_writer.py      # 51 条契约断言，含“CLI 与网页 Excel 逐字节一致”
 python src/test_cli_smoke.py        # 26 条 CLI 端到端断言（驱动完整 main()，含申报基数、医疗定额、逐月薪资与反推）
-python src/test_deploy_gate.py      # 21 条门禁守卫：检查失败必须非零退出、check 模式零副作用
+python src/test_deploy_gate.py      # 37 条门禁守卫：检查失败必须非零退出、不代提交、check 模式零副作用
 ```
 
 The JS engine is numerically equivalent to the Python CLI; the .xlsx writer is a byte-for-byte
@@ -186,12 +186,20 @@ parenthesized block silently returns 0), and `check` mode must leave the reposit
 
 ```bash
 # Windows
- deploy-pages.bat            # 校验 + 提交 + 推送（默认）
- deploy-pages.bat check      # 只跑门禁：不提交、不推送，无任何副作用
+ deploy-pages.bat            # 跑门禁 → 列出待推送提交 → 交互确认后推送（不会代为提交）
+ deploy-pages.bat check      # 只跑门禁：不提交、不推送，无任何副作用（脏工作树也可跑）
+ deploy-pages.bat publish    # 跑门禁后直接推送（免交互，供 CI 用）
+ deploy-pages.bat gitee      # = publish gitee（可选 github / both，默认 both）
 
 # macOS / Linux
- bash deploy-pages.sh       # 可选参数: gitee | github | both | check
+ bash deploy-pages.sh                  # 同上，确认制
+ bash deploy-pages.sh check            # 只校验
+ bash deploy-pages.sh publish [both|gitee|github]
 ```
+
+> **发布不会代你提交**：若工作树有未提交改动，`publish`/确认制会在跑重型测试**之前**直接停下并列出脏文件，
+> 避开一个把真实变更抹平的 `chore(deploy): update Web UI / PWA assets` 大提交。
+> 默认答非 `y` 即取消推送（非交互环境亦为取消，不会误推）。
 
 > 门禁除内联副本一致性、三套断言外，还会检查**交付物漂移**：若 `index.html` 原本与已提交版本一致，
 > 而重跑内联脚本后它变了，说明仓里交付旧副本（改了源文件却忘跑内联），门禁直接非零退出。
