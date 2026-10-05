@@ -96,6 +96,10 @@ def build_report(ctx):
         return row + [("", 0)] * (9 - len(row))
 
     blank9 = [("", 0)] * 9
+    # Beijing adds a flat 3 CNY/month on top of the 2% employee medical rate; show both.
+    med_personal = percent(rates["medical_emp"])
+    if rates.get("medical_fixed", 0):
+        med_personal += f" + {rates['medical_fixed']:g} 元/月"
     policy = [
         pad([(f"{ctx['city_name']} {ctx['year']} 年度参数（核实：{ctx['verified_on']}）", 2)]),
         [("期间", 1), ("养老下限", 1), ("养老上限", 1), ("医疗下限", 1), ("医疗上限", 1),
@@ -105,7 +109,7 @@ def build_report(ctx):
         blank9,
         pad([("缴费比例", 1), ("个人", 1), ("单位", 1)]),
         pad([("养老保险", 5), (percent(rates["pension_emp"]), 4), (percent(rates["pension_org"]), 4)]),
-        pad([("医疗保险", 5), (percent(rates["medical_emp"]), 4), (percent(rates["medical_org"]), 4)]),
+        pad([("医疗保险", 5), (med_personal, 4), (percent(rates["medical_org"]), 4)]),
         pad([("失业保险", 5), (percent(rates["unemploy_emp"]), 4), (percent(rates["unemploy_org"]), 4)]),
         pad([("工伤保险", 5), ("—", 5), (percent(rates["injury_org"]), 4)]),
         pad([("住房公积金（本次选用）", 5), (percent(housing_pct / 100), 4), (percent(housing_pct / 100), 4)]),

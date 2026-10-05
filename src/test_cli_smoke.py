@@ -79,6 +79,15 @@ check(code == 0, "inverse run exits 0", f"(code={code}, err={err[-300:]})")
 check("反推结果" in out, "inverse result printed")
 check("25,000" in out or "300,000" in out, "inverse reaches the requested take-home target")
 
+print("\n=== CLI: Beijing fixed medical top-up (2% + 3 CNY/month) ===")
+# city 2 = 北京, year default, 月薪 30000, 第 1 月, 公积金 12%, 无补充公积金, 无自定义基数
+code, out, err = run_cli(["2", "", "30000", "", "12", "n", "n"] + TAIL)
+check(code == 0, "Beijing run exits 0", f"(code={code}, err={err[-300:]})")
+check("603.00" in out, "Beijing 医疗个人 = 603.00（600 + 3 元定额）")
+check("6,753.00" in out, "Beijing 五险一金个人合计 = 6,753.00")
+check("22,699.59" in out, "Beijing M1 到手 = 22,699.59")
+# Same numbers as web/test-compute.js Test 13: matching literals are the cross-engine proof.
+
 print("\n============================================")
 if FAILURES:
     print(f"  {len(FAILURES)} ASSERTION(S) FAILED")

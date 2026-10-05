@@ -104,6 +104,8 @@ export function buildReport(ctx) {
   const money6 = (vals) => vals.map((v) => [money(v), 3]);
   const r = ctx.rates;
   const pad = (row) => row.concat(Array(9 - row.length).fill(['', 0]));
+  // Beijing adds a flat 3 CNY/month on top of the 2% employee medical rate; show both.
+  const medPersonal = pct(r.medical_emp) + (r.medical_fixed ? ` + ${r.medical_fixed} 元/月` : '');
   const policy = [
     pad([[`${cityName} ${year} 年度参数（核实：${verifiedOn}）`, 2]]),
     [['期间', 1], ['养老下限', 1], ['养老上限', 1], ['医疗下限', 1], ['医疗上限', 1],
@@ -113,7 +115,7 @@ export function buildReport(ctx) {
     Array(9).fill(['', 0]),
     pad([['缴费比例', 1], ['个人', 1], ['单位', 1]]),
     pad([['养老保险', 5], [pct(r.pension_emp), 4], [pct(r.pension_org), 4]]),
-    pad([['医疗保险', 5], [pct(r.medical_emp), 4], [pct(r.medical_org), 4]]),
+    pad([['医疗保险', 5], [medPersonal, 4], [pct(r.medical_org), 4]]),
     pad([['失业保险', 5], [pct(r.unemploy_emp), 4], [pct(r.unemploy_org), 4]]),
     pad([['工伤保险', 5], ['—', 5], [pct(r.injury_org), 4]]),
     pad([['住房公积金（本次选用）', 5], [pct(ctx.housingPct / 100), 4], [pct(ctx.housingPct / 100), 4]]),

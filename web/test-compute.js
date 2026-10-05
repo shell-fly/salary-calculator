@@ -556,6 +556,35 @@ assert(declaredInputs.every((tag) => /step="1"/.test(tag)),
   'declared-base inputs use step="1" so statutory bounds stay valid');
 
 // =====================================================================
+// Test 13: fixed medical top-up per month (Beijing 大额医疗互助 3 元/月)
+// Beijing charges the employee 2% of the base PLUS 3 CNY per month; every other
+// supported city has no personal fixed amount.
+// =====================================================================
+console.log('\n=== Fixed medical top-up (medical_fixed) ===');
+
+assert(CFG.cities.beijing.social_rate.medical_fixed === 3, 'BJ config medical_fixed = 3');
+for (const code of ['shanghai', 'guangzhou', 'hangzhou', 'shenzhen', 'nanjing', 'hefei', 'wuhu']) {
+  assert((CFG.cities[code].social_rate.medical_fixed || 0) === 0, `${code} has no personal fixed amount`);
+}
+
+const sessBJ26f = createSession('beijing', 2026, CFG);
+assert(sessBJ26f.medical_fixed === 3, 'session exposes medical_fixed = 3');
+// Beijing 2026 H1 base 7460..36348? bounds matter only for the clamp; 30000 sits inside.
+const bjRows = computeYear(sessBJ26f, 30000, [], 12, 0, CFG);
+// pension 30000*8% = 2400; medical 30000*2% + 3 = 603; unemploy 30000*0.5% = 150; fund 30000*12% = 3600
+assertClose(bjRows[0].medical_p, 603, 0.005, 'BJ M1 医疗 = 600 + 3 = 603');
+assertClose(bjRows[0].social_p_total, 6753, 0.005, 'BJ M1 五险一金 = 6753（含 3 元定额）');
+// taxable M1 = 30000 - 5000 - 6753 = 18247 -> 3% = 547.41; net = 30000 - 6753 - 547.41 = 22699.59
+assertClose(bjRows[0].month_tax, 547.41, 0.01, 'BJ M1 个税 = 547.41');
+assertClose(bjRows[0].net, 22699.59, 0.01, 'BJ M1 到手 = 22699.59');
+// The fixed amount recurs every month, so M7 must carry it too.
+assertClose(bjRows[6].medical_p, 603, 0.005, 'BJ M7 医疗 = 603 (fixed amount is monthly)');
+
+// Shanghai must be untouched by the new field.
+assert(sessSH26.medical_fixed === 0, 'SH session medical_fixed = 0');
+assertClose(computeYear(sessSH26, 30000, [], 7, 0, CFG)[0].medical_p, 600, 0.005, 'SH M1 医疗 = 600 (no top-up)');
+
+// =====================================================================
 // Summary
 // =====================================================================
 console.log('\n============================================');

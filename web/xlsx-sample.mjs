@@ -64,6 +64,7 @@ export function reportBytes() {
     rates: {
       pension_emp: sess.pension_emp, pension_org: sess.pension_org,
       medical_emp: sess.medical_emp, medical_org: sess.medical_org,
+      medical_fixed: sess.medical_fixed,
       unemploy_emp: sess.unemploy_emp, unemploy_org: sess.unemploy_org,
       injury_org: sess.injury_org,
     },

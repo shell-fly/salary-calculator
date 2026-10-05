@@ -119,6 +119,8 @@ class Session:
         self.medical_emp = float(sr["medical_emp"]);  self.medical_org = float(sr["medical_org"])
         self.unemploy_emp = float(sr["unemploy_emp"]); self.unemploy_org = float(sr["unemploy_org"])
         self.injury_org = float(sr.get("injury_org", 0.0))
+        # Fixed monthly amount on top of the percentage (Beijing: 3 CNY 大额医疗互助)
+        self.medical_fixed = float(sr.get("medical_fixed", 0.0))
 
         self._year_data = y
 
@@ -225,7 +227,7 @@ def compute_month(sess, month_no, salary, social_base_dict, housing_base,
 
     # Five insurances (employee share)
     pension_p = sb_p * sess.pension_emp
-    medical_p = sb_m * sess.medical_emp
+    medical_p = sb_m * sess.medical_emp + sess.medical_fixed
     unemploy_p = sb_u * sess.unemploy_emp
     housing_p = round_yuan(housing_base * housing_pct / 100.0)
     extra_p = round_yuan(housing_base * extra_pct / 100.0) if extra_pct else 0.0
@@ -573,7 +575,8 @@ def show_monthly(sess, r, special_items):
     print(f"\n【1. 五险一金（个人缴纳部分）】")
     print(f"  {'项目':<14}{'比例':>8}{'金额(元)':>14}")
     print(f"  {'养老保险':<14}{f'{sess.pension_emp*100:.0f}%':>8}{fmt(r['pension_p']):>14}")
-    print(f"  {'医疗保险(含生育)':<20}{f'{sess.medical_emp*100:.0f}%':>8}{fmt(r['medical_p']):>14}")
+    med_label = f"{sess.medical_emp*100:.0f}%" + (f"+{sess.medical_fixed:g}元" if sess.medical_fixed else "")
+    print(f"  {'医疗保险(含生育)':<20}{med_label:>8}{fmt(r['medical_p']):>14}")
     print(f"  {'失业保险':<14}{f'{sess.unemploy_emp*100:.1f}%':>8}{fmt(r['unemploy_p']):>14}")
     hpct = str(r["housing_pct"]) + "%"
     epct = str(r["extra_pct"]) + "%" if r["extra_pct"] else ""
@@ -750,6 +753,7 @@ def build_workbook(sess, months_12, annual_medical=0.0, bonus=0.0,
         "housing_bounds": [list(sess.housing_bounds(1)), list(sess.housing_bounds(7))],
         "rates": {"pension_emp": sess.pension_emp, "pension_org": sess.pension_org,
                   "medical_emp": sess.medical_emp, "medical_org": sess.medical_org,
+                  "medical_fixed": sess.medical_fixed,
                   "unemploy_emp": sess.unemploy_emp, "unemploy_org": sess.unemploy_org,
                   "injury_org": sess.injury_org},
         "housing_pct": housing_pct,

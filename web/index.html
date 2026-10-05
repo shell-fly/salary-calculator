@@ -206,7 +206,7 @@ input[type="number"] { width: 120px; padding: 4px 8px; border: 1px solid #ccc; b
           <table>
             <tr><th>项目</th><th>比例</th><th>金额</th></tr>
             <tr><td>养老保险</td><td>{{ (session.pension_emp*100).toFixed(1) }}%</td><td>{{ fmt(monthDetail.pension_p) }}</td></tr>
-            <tr><td>医疗保险</td><td>{{ (session.medical_emp*100).toFixed(1) }}%</td><td>{{ fmt(monthDetail.medical_p) }}</td></tr>
+            <tr><td>医疗保险</td><td>{{ (session.medical_emp*100).toFixed(1) }}%{{ session.medical_fixed ? ' + ' + session.medical_fixed + ' 元/月' : '' }}</td><td>{{ fmt(monthDetail.medical_p) }}</td></tr>
             <tr><td>失业保险</td><td>{{ (session.unemploy_emp*100).toFixed(1) }}%</td><td>{{ fmt(monthDetail.unemploy_p) }}</td></tr>
             <tr><td>住房公积金</td><td>{{ params.housingPct }}%</td><td>{{ fmt(monthDetail.housing_p) }}</td></tr>
             <tr v-if="params.useExtra"><td>补充公积金</td><td>{{ params.extraPct }}%</td><td>{{ fmt(monthDetail.extra_p) }}</td></tr>
@@ -486,6 +486,8 @@ function createSession(cityCode, year, CFG) {
     medical_org: Number(city.social_rate.medical_org),
     unemploy_emp: Number(city.social_rate.unemploy_emp),
     unemploy_org: Number(city.social_rate.unemploy_org),
+    // Fixed monthly amount on top of the percentage (Beijing: 3 CNY 大额医疗互助)
+    medical_fixed: Number(city.social_rate.medical_fixed || 0),
     injury_org: Number(city.social_rate.injury_org || 0),
 
     taxBrackets,
@@ -557,7 +559,7 @@ function computeMonth(sess, monthNo, salary, socialBaseDict, housingBase,
 
   // Five insurances (employee share)
   const pensionP = sbP * sess.pension_emp;
-  const medicalP = sbM * sess.medical_emp;
+  const medicalP = sbM * sess.medical_emp + sess.medical_fixed;
   const unemployP = sbU * sess.unemploy_emp;
   const housingP = roundYuan(housingBase * housingPct / 100.0);
   const extraP = extraPct ? roundYuan(housingBase * extraPct / 100.0) : 0.0;
@@ -748,6 +750,7 @@ function inverseGrossFromNet(sess, targetNet, specialItems, housingPct, extraPct
     "guangzhou_medical_calendar_year": "广州职工基本医疗（含生育）保险同样按自然年度调整，且区间与广东省职保上下限不同：2025 年度 6236~31179、2026 年度 6234~31170（上限=本市上上年度全口径月平均工资的 300%，下限 60%，广州市税务局公告）；因此广州 2025/2026 改用三险分别指定的对象格式。2023/2024 未查到广州市医保官方上下限，暂沿用与职保共用区间并在对比文档中标为已知近似",
     "verified_on_semantics": "verified_on 为该年度行的核对日期：能定位到官方公告时即公告日，否则为对齐日期；provisional 表示该半年度仍含沿用上一期、官方尚未公布的项。各年度行的 verified_on 默认指**社保（职保/失业）基数公告日**，公积金另有 7 月年度通知（见 announcement_dates）；若该年度行的社保尚未公布，则记为该行最近一次可核公告（多为公积金通知），并对应半年度标 provisional。2023–2026 各行的 verified_on 均已回到可查证的公告日（无对齐日期残留）",
     "calendar_year_provinces": "浙江（杭州）、江苏（南京）、安徽（合肥/芜湖）按全省统一的自然年度公布职保缴费基数（公布晚于执行期，需补差），因此同一年度的 H1 与 H2 社保区间必须相同；income-calc 对杭州错将 H1 沿用了上一年值，本工具已修正。公积金仍按 7 月公积金年度，H1 属上一年度是正常的",
+    "medical_fixed": "职工基线医疗保险个人按比缴纳之外，**北京**另按每人每月 3 元缴纳大额医疗费用互助资金（《北京市基本医疗保险规定》第三十八条；海淀区政府 2025-10-22 口径答复：单位 9.8%、个人 2% + 3 元），故 beijing.social_rate.medical_fixed = 3。上海/广州/深圳/杭州/南京/合肥/芜湖经核查无个人按月定额项（广东的**地方补充医疗保险由单位缴纳**），均填 0。该定额按月计入个人医保缴纳并参与个税专项扣除。",
     "announcement_dates_2023_2025": "上海：2023 年度 2023-06-28、2024 年度 2024-07-31、2025 年度 2025-09-18（本市调整 2025 年度社保缴费基数上下限，[7460,37302]）；北京：京人社发〔2023〕8号 2023-07-25、2024 年度通告 2024-07-31、2025 年度通告 2025-09-18（[7162,35811]）；广东（广州/深圳）：粤人社发〔2023〕22号 2023-06-29（执行 2023-07-01至2024-06-30）、2024 年度通知 2024-12-15（执行 2024-07-01至2025-06-30）、粤人社发〔2025〕32号 2025-10-24；浙江（杭州）：浙人社发〔2023〕60号 2023-12-13、浙人社发〔2024〕61号 2024-10-11、浙人社发〔2025〕52号 2025-09-17；江苏（南京）：苏人社发〔2023〕3号 2023-01-09（暂按标准）、苏人社发〔2024〕38号 2024-09-30、苏人社发〔2025〕33号 2025-09-18；安徽（合肥/芜湖）：皖人社秘〔2023〕186号 2023-08-17、皖人社秘〔2024〕196号 2024-08-21、皖人社秘〔2025〕154号 2025-09-19",
     "announcement_dates": "北京社保 2026 年度 2026-08-21 通告（[7270,36348]）、北京 2025 年度 2025-09-18 通告（[7162,35811]）、北京公积金 2026 年度 2026-08-24 通知（[2540,36348]）、南京公积金 2026 年度 2026-07-17 通知（[2660,42400]）、杭州公积金 2026 年度 2026-07-25 通知（[2660,42151]）、广州公积金 2026 年度 2026-07-06 通知（[2500,41697]）、安徽社保 2026 年度 2026-09-07 五部门通知（[4354,21772]，执行 2026 自 1 月 1 日全年度）、合肥公积金 2026 年度 2026-06-29 通知（[2320,31564]）、广东职保 2025 年度 粤人社发〔2025〕32号（上限 27549，广州/省直下限 5510、其他地区 4775）"
   },
@@ -763,7 +766,7 @@ function inverseGrossFromNet(sess, targetNet, specialItems, housingPct, extraPct
       "supplemental_housing_rate": [1, 5],
       "social_rate": {
         "pension_emp": 0.08, "pension_org": 0.16,
-        "medical_emp": 0.02, "medical_org": 0.09,
+        "medical_emp": 0.02, "medical_org": 0.09, "medical_fixed": 0,
         "unemploy_emp": 0.005, "unemploy_org": 0.005,
         "injury_org": 0.0016
       },
@@ -797,7 +800,7 @@ function inverseGrossFromNet(sess, targetNet, specialItems, housingPct, extraPct
       "supplemental_housing_rate": [0, 12],
       "social_rate": {
         "pension_emp": 0.08, "pension_org": 0.16,
-        "medical_emp": 0.02, "medical_org": 0.10,
+        "medical_emp": 0.02, "medical_org": 0.10, "medical_fixed": 3,
         "unemploy_emp": 0.005, "unemploy_org": 0.005,
         "injury_org": 0.002
       },
@@ -831,7 +834,7 @@ function inverseGrossFromNet(sess, targetNet, specialItems, housingPct, extraPct
       "supplemental_housing_rate": [0, 12],
       "social_rate": {
         "pension_emp": 0.08, "pension_org": 0.16,
-        "medical_emp": 0.02, "medical_org": 0.08,
+        "medical_emp": 0.02, "medical_org": 0.08, "medical_fixed": 0,
         "unemploy_emp": 0.002, "unemploy_org": 0.008,
         "injury_org": 0.002
       },
@@ -873,7 +876,7 @@ function inverseGrossFromNet(sess, targetNet, specialItems, housingPct, extraPct
       "supplemental_housing_rate": [0, 12],
       "social_rate": {
         "pension_emp": 0.08, "pension_org": 0.16,
-        "medical_emp": 0.02, "medical_org": 0.095,
+        "medical_emp": 0.02, "medical_org": 0.095, "medical_fixed": 0,
         "unemploy_emp": 0.005, "unemploy_org": 0.005,
         "injury_org": 0.002
       },
@@ -907,7 +910,7 @@ function inverseGrossFromNet(sess, targetNet, specialItems, housingPct, extraPct
       "supplemental_housing_rate": [0, 12],
       "social_rate": {
         "pension_emp": 0.08, "pension_org": 0.16,
-        "medical_emp": 0.02, "medical_org": 0.055,
+        "medical_emp": 0.02, "medical_org": 0.055, "medical_fixed": 0,
         "unemploy_emp": 0.003, "unemploy_org": 0.007,
         "injury_org": 0.0014
       },
@@ -957,7 +960,7 @@ function inverseGrossFromNet(sess, targetNet, specialItems, housingPct, extraPct
       "supplemental_housing_rate": [0, 12],
       "social_rate": {
         "pension_emp": 0.08, "pension_org": 0.16,
-        "medical_emp": 0.02, "medical_org": 0.09,
+        "medical_emp": 0.02, "medical_org": 0.09, "medical_fixed": 0,
         "unemploy_emp": 0.005, "unemploy_org": 0.005,
         "injury_org": 0.002
       },
@@ -991,7 +994,7 @@ function inverseGrossFromNet(sess, targetNet, specialItems, housingPct, extraPct
       "supplemental_housing_rate": [0, 12],
       "social_rate": {
         "pension_emp": 0.08, "pension_org": 0.16,
-        "medical_emp": 0.02, "medical_org": 0.085,
+        "medical_emp": 0.02, "medical_org": 0.085, "medical_fixed": 0,
         "unemploy_emp": 0.005, "unemploy_org": 0.005,
         "injury_org": 0.002
       },
@@ -1025,7 +1028,7 @@ function inverseGrossFromNet(sess, targetNet, specialItems, housingPct, extraPct
       "supplemental_housing_rate": [0, 12],
       "social_rate": {
         "pension_emp": 0.08, "pension_org": 0.16,
-        "medical_emp": 0.02, "medical_org": 0.085,
+        "medical_emp": 0.02, "medical_org": 0.085, "medical_fixed": 0,
         "unemploy_emp": 0.005, "unemploy_org": 0.005,
         "injury_org": 0.002
       },
@@ -1482,6 +1485,8 @@ function buildReport(ctx) {
   const money6 = (vals) => vals.map((v) => [money(v), 3]);
   const r = ctx.rates;
   const pad = (row) => row.concat(Array(9 - row.length).fill(['', 0]));
+  // Beijing adds a flat 3 CNY/month on top of the 2% employee medical rate; show both.
+  const medPersonal = pct(r.medical_emp) + (r.medical_fixed ? ` + ${r.medical_fixed} 元/月` : '');
   const policy = [
     pad([[`${cityName} ${year} 年度参数（核实：${verifiedOn}）`, 2]]),
     [['期间', 1], ['养老下限', 1], ['养老上限', 1], ['医疗下限', 1], ['医疗上限', 1],
@@ -1491,7 +1496,7 @@ function buildReport(ctx) {
     Array(9).fill(['', 0]),
     pad([['缴费比例', 1], ['个人', 1], ['单位', 1]]),
     pad([['养老保险', 5], [pct(r.pension_emp), 4], [pct(r.pension_org), 4]]),
-    pad([['医疗保险', 5], [pct(r.medical_emp), 4], [pct(r.medical_org), 4]]),
+    pad([['医疗保险', 5], [medPersonal, 4], [pct(r.medical_org), 4]]),
     pad([['失业保险', 5], [pct(r.unemploy_emp), 4], [pct(r.unemploy_org), 4]]),
     pad([['工伤保险', 5], ['—', 5], [pct(r.injury_org), 4]]),
     pad([['住房公积金（本次选用）', 5], [pct(ctx.housingPct / 100), 4], [pct(ctx.housingPct / 100), 4]]),
@@ -1906,6 +1911,7 @@ const app = createApp({
         rates: {
           pension_emp: sess.pension_emp, pension_org: sess.pension_org,
           medical_emp: sess.medical_emp, medical_org: sess.medical_org,
+          medical_fixed: sess.medical_fixed,
           unemploy_emp: sess.unemploy_emp, unemploy_org: sess.unemploy_org,
           injury_org: sess.injury_org,
         },

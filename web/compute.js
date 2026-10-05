@@ -169,6 +169,8 @@ export function createSession(cityCode, year, CFG) {
     medical_org: Number(city.social_rate.medical_org),
     unemploy_emp: Number(city.social_rate.unemploy_emp),
     unemploy_org: Number(city.social_rate.unemploy_org),
+    // Fixed monthly amount on top of the percentage (Beijing: 3 CNY 大额医疗互助)
+    medical_fixed: Number(city.social_rate.medical_fixed || 0),
     injury_org: Number(city.social_rate.injury_org || 0),
 
     taxBrackets,
@@ -240,7 +242,7 @@ export function computeMonth(sess, monthNo, salary, socialBaseDict, housingBase,
 
   // Five insurances (employee share)
   const pensionP = sbP * sess.pension_emp;
-  const medicalP = sbM * sess.medical_emp;
+  const medicalP = sbM * sess.medical_emp + sess.medical_fixed;
   const unemployP = sbU * sess.unemploy_emp;
   const housingP = roundYuan(housingBase * housingPct / 100.0);
   const extraP = extraPct ? roundYuan(housingBase * extraPct / 100.0) : 0.0;
