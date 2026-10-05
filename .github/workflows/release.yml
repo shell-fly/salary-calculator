@@ -55,7 +55,7 @@ jobs:
                gh release edit "$TAG" --title "工资计算器（中国）$TAG" --notes-file dist/RELEASE_NOTES.md; }
 
       - name: Publish Gitee 发行版 (soft-fail)
-        if: env.GITEE_TOKEN != ''
+        if: ${{ secrets.GITEE_TOKEN != '' }}
         continue-on-error: true
         env:
           GITEE_TOKEN: ${{ secrets.GITEE_TOKEN }}

@@ -135,7 +135,7 @@ def test_release_workflow_wired():
                    "git diff --exit-code -- web/index.html", "--fast",
                    "--notes-file", "gh release create", "--clobber",
                    "gitee_release.py publish", "continue-on-error",
-                   "env.GITEE_TOKEN", "contents: write"]:
+                   "secrets.GITEE_TOKEN", "contents: write"]:
         assert needle in txt, "release.yml 缺少: " + needle
 
 
