@@ -154,6 +154,8 @@ def main(argv=None):
     ap = argparse.ArgumentParser(prog="release", description="Package Release assets (see spec 2026-10-05).")
     ap.add_argument("version", help="release version, e.g. v3.11")
     ap.add_argument("--fast", action="store_true", help="skip heavy publish gate (dev/test only)")
+    ap.add_argument("--notes-file", dest="notes_file", default=None,
+                    help="also write the release notes to this file (used by CI)")
     ns = ap.parse_args(argv)
     if not validate_version(ns.version):
         print("用法: release <vX.Y|.Z>  (版本号须以 v 开头，如 v3.11)")
@@ -163,6 +165,11 @@ def main(argv=None):
     if not ns.fast:
         run_gate(root)
     html_name, zip_name = build_dist(root, ns.version)
+    if ns.notes_file:
+        notes_path = ns.notes_file if os.path.isabs(ns.notes_file) else os.path.join(root, ns.notes_file)
+        os.makedirs(os.path.dirname(notes_path), exist_ok=True)
+        with open(notes_path, "w", encoding="utf-8") as fh:
+            fh.write(render_release_notes(ns.version, html_name, zip_name))
     print("已产出 dist/%s 与 dist/%s" % (html_name, zip_name))
     print(render_release_notes(ns.version, html_name, zip_name))
     print(render_upload_steps(ns.version))

@@ -108,6 +108,24 @@ def test_entry_scripts_forward_to_release_py_with_parity():
     assert sh.startswith("#!/usr/bin/env bash")
 
 
+def test_notes_file_written_and_absent_without_flag():
+    root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    import shutil
+    nf = os.path.join(root, "dist", "NOTES_T1.md")
+    shutil.rmtree(os.path.join(root, "dist"), ignore_errors=True)
+    r = _run_release(["v9.9.9", "--fast", "--notes-file", "dist/NOTES_T1.md"])
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert os.path.isfile(nf)
+    txt = open(nf, encoding="utf-8").read()
+    assert "工资计算器（中国）v9.9.9" in txt
+    assert "工资计算器（中国）_v9.9.9.html" in txt and "工资计算器（中国）_v9.9.9.zip" in txt
+    shutil.rmtree(os.path.join(root, "dist"), ignore_errors=True)
+    r2 = _run_release(["v9.9.9", "--fast"])
+    assert r2.returncode == 0, r2.stdout + r2.stderr
+    assert not os.path.exists(nf)
+    shutil.rmtree(os.path.join(root, "dist"), ignore_errors=True)
+
+
 def run_suite():
     fns = [v for k, v in sorted(globals().items()) if k.startswith("test_")]
     fails = 0
