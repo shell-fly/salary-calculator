@@ -10,6 +10,11 @@
 // NOTE: the block is rewritten by index slicing (no String.replace replacement patterns),
 // so `$&` / `$'` sequences inside the JSON can never be re-interpreted — same safety rule
 // as inline-vue.mjs.
+//
+// Line endings are normalised to LF on purpose: the repository is often checked out with
+// core.autocrlf=true, so config.json arrives as CRLF. Embedding it verbatim would make the
+// shipped index.html depend on each developer's git config (and would leave it with mixed
+// endings, which `git status` then reports as modified even when the content is unchanged).
 import { readFileSync, writeFileSync } from 'fs';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
@@ -18,17 +23,19 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const CONFIG_FILE = join(__dirname, '..', 'config.json');
 const HTML_FILE = join(__dirname, 'index.html');
 
+const toLf = (text) => text.replace(/\r\n/g, '\n');
+
 const OPEN_TAG = '<script type="application/json" id="cfg-data">';
 const CLOSE_TAG = '</script>';
 
-const config = readFileSync(CONFIG_FILE, 'utf-8');
+const config = toLf(readFileSync(CONFIG_FILE, 'utf-8'));
 if (config.toLowerCase().includes('</script')) {
   console.error('ERROR: config.json contains a closing script tag; refusing to embed.');
   process.exit(1);
 }
 JSON.parse(config); // fail fast on malformed JSON instead of writing a broken page
 
-const html = readFileSync(HTML_FILE, 'utf-8');
+const html = toLf(readFileSync(HTML_FILE, 'utf-8'));
 const start = html.indexOf(OPEN_TAG);
 if (start < 0) {
   console.error('ERROR: cfg-data block not found in index.html.');

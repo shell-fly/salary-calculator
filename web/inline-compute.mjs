@@ -10,6 +10,9 @@
 // (never String.replace with a pattern containing $), so nothing in the source can be
 // re-interpreted as a replacement pattern — same safety rule as inline-xlsx.mjs.
 // `web/test-compute.js` fails if the two copies drift.
+//
+// Everything is normalised to LF so the shipped index.html is byte-stable whatever
+// core.autocrlf says on the machine that built it.
 import { readFileSync, writeFileSync } from 'fs';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
@@ -21,7 +24,9 @@ const MARKER = '<!-- Inline Compute Engine (from compute.js, export keywords rem
 const OPEN = '<script id="compute-engine">';
 const CLOSE = '</script>';
 
-const source = readFileSync(SOURCE_FILE, 'utf-8');
+const toLf = (text) => text.replace(/\r\n/g, '\n');
+
+const source = toLf(readFileSync(SOURCE_FILE, 'utf-8'));
 // Keep the code byte-identical except for ESM syntax: drop `export ` prefixes and any
 // `import ...` line (index.html loads the block as a classic script).
 const body = source.split('\n')
@@ -33,7 +38,7 @@ if (body.toLowerCase().includes('</script')) {
   process.exit(1);
 }
 
-let html = readFileSync(HTML_FILE, 'utf-8');
+let html = toLf(readFileSync(HTML_FILE, 'utf-8'));
 const marker = html.indexOf(MARKER);
 if (marker < 0) {
   console.error('ERROR: could not find the inline compute-engine marker in index.html.');

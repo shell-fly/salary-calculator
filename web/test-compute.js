@@ -530,7 +530,7 @@ console.log('\n=== Inlined engine drift guard ===');
 const htmlPath = join(__dirname, 'index.html');
 const html = readFileSync(htmlPath, 'utf-8');
 const enginePath = join(__dirname, 'compute.js');
-const engineSource = readFileSync(enginePath, 'utf-8');
+const engineSource = readFileSync(enginePath, 'utf-8').replace(/\r\n/g, '\n');
 const OPEN_TAG = '<script id="compute-engine">';
 const CLOSE_TAG = '</script>';
 
@@ -544,6 +544,10 @@ const expectedEngine = engineSource.split('\n')
   .join('\n').trim();
 assert(inlinedEngine === expectedEngine,
   'index.html inlined engine is byte-identical to compute.js (run: node web/inline-compute.mjs)');
+// The shipped artifact must stay newline-stable: web/inline-*.mjs normalise to LF, otherwise a
+// build on a core.autocrlf machine leaves a mixed-ending index.html that git flags as modified
+// even when nothing changed (which is exactly how the "stale embedded copy" class hides).
+assert(!html.includes('\r'), 'index.html carries no CRLF (byte-stable shipped artifact)');
 assert(inlinedEngine.includes('function declaredBase('), 'declaredBase() reached the inlined engine');
 assert(!/cdn\.jsdelivr|unpkg\/sheetjs|xlsx\.full\.min\.js/i.test(html),
   'index.html still free of spreadsheet CDN dependencies');

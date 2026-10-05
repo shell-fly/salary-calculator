@@ -9,6 +9,8 @@
 // The blocks are written by index slicing and a plain string removal of the `export ` keyword
 // (never String.replace with a pattern containing $), so nothing in the source can be
 // re-interpreted as a replacement pattern. `src/test_xlsx_writer.py` fails if the copies drift.
+// Sources and the HTML are normalised to LF so the shipped index.html is byte-stable whatever
+// core.autocrlf says on the building machine.
 import { readFileSync, writeFileSync } from 'fs';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
@@ -17,16 +19,18 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const HTML_FILE = join(__dirname, 'index.html');
 const ANCHOR = '<!-- Vue Application -->';
 
+const toLf = (text) => text.replace(/\r\n/g, '\n');
+
 // Order matters: the report builder uses the writer, so it must be injected after it.
 const MODULES = [
   { file: 'xlsx-writer.js', id: 'xlsx-writer' },
   { file: 'xlsx-report.js', id: 'xlsx-report' },
 ];
 
-let html = readFileSync(HTML_FILE, 'utf-8');
+let html = toLf(readFileSync(HTML_FILE, 'utf-8'));
 
 for (const { file, id } of MODULES) {
-  const source = readFileSync(join(__dirname, file), 'utf-8');
+  const source = toLf(readFileSync(join(__dirname, file), 'utf-8'));
   // Keep the code byte-identical except for ESM syntax: drop `export ` prefixes and the
   // `import ...` lines (the inlined blocks share globals, and index.html loads them as classic
   // scripts in the same order as the module graph).
@@ -49,7 +53,9 @@ for (const { file, id } of MODULES) {
       console.error('ERROR: could not find the "<!-- Vue Application -->" anchor in index.html.');
       process.exit(1);
     }
-    html = html.replace(ANCHOR, `${openTag}\n${body}${closeTag}\n\n${ANCHOR}`);
+    // Functional replacement (never a replacement string): the module body may legitimately
+    // contain `$&` / `$1` sequences, which a string replacement would re-interpret.
+    html = html.replace(ANCHOR, () => `${openTag}\n${body}${closeTag}\n\n${ANCHOR}`);
   }
   const blocks = html.split(openTag).length - 1;
   const inlined = html.split(openTag)[1].split(closeTag, 1)[0];
