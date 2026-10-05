@@ -45,6 +45,20 @@ def test_extract_release_id_prefers_id_then_nested():
     assert gr.extract_release_id({"data": {"id": 9}}) == 9
 
 
+def test_missing_token_skips_with_zero_exit():
+    import subprocess
+    env = dict(os.environ)
+    env.pop("GITEE_TOKEN", None)
+    env["GITEE_OWNER"] = "o"; env["GITEE_REPO"] = "r"
+    path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "gitee_release.py")
+    r = subprocess.run([sys.executable, path, "publish", "--tag", "v1", "--title", "T",
+                        "--notes-file", "x", "--assets"],
+                       capture_output=True, text=True, env=env,
+                       encoding="utf-8", errors="replace")
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert "跳过" in r.stdout
+
+
 def run_suite():
     fns = [v for k, v in sorted(globals().items()) if k.startswith("test_")]
     fails = 0
