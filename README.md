@@ -60,9 +60,9 @@ Open `web/index.html` directly in any browser — **nothing to install**.
 | Android | 把 `web/index.html` 传到手机，用 Chrome 打开（或 Termux 内 `bash run.sh`） |
 | iPhone / iPad | 通过 AirDrop / 文件 App / iCloud 传输后用 Safari 打开 |
 
-- 单文件自包含（约 260 KB），**离线可用**；参数改动实时刷新所有结果，CSV / Excel 导出也完全离线完成。
+- 单文件自包含（约 258 KB），**离线可用**；参数改动实时刷新所有结果，CSV / Excel 导出也完全离线完成。
 - 想更新城市/年度数据：点击页面「导入配置」选择外部 `config.json` 覆盖内嵌默认值。
-- Self-contained single file (~260 KB), **works offline**; results update in real time as you edit
+- Self-contained single file (~258 KB), **works offline**; results update in real time as you edit
   inputs, and both the CSV and Excel exports work fully offline as well.
 - To update city/year data: click "导入配置 / Import" and select an external `config.json`.
 
@@ -131,14 +131,15 @@ china-salary-calculator/
 │   ├── xlsx_writer.py            # 零依赖 .xlsx 写入器（表头样式/千分位/冻结/筛选）
 │   ├── xlsx_report.py            # 四表报表（与 web/xlsx-report.js 逐字对应）
 │   ├── test_xlsx_writer.py       # Excel 契约测试（含双引擎逐字节一致校验）
-│   └── test_cli_smoke.py         # CLI 端到端冒烟测试（脚本化 stdin 驱动完整 main()，26 条）
+│   ├── test_cli_smoke.py         # CLI 端到端冒烟测试（脚本化 stdin 驱动完整 main()）
+│   └── test_deploy_gate.py       # 发布门禁自身的守卫（失败必须非零退出、check 模式无副作用）
 ├── web/
 │   ├── index.html                # Web UI 单文件（内嵌 Vue 3 + 计算引擎 + Excel 引擎 + 配置）
 │   ├── compute.js                # 计算引擎 JS 源（开发参考）
 │   ├── xlsx-writer.js            # Excel 写入器 JS 源（与 Python 版输出一致）
 │   ├── xlsx-report.js            # 四表报表 JS 源（含 25 列定义）
 │   ├── xlsx-sample.mjs           # 跨引擎探针：node web/xlsx-sample.mjs [--report]
-│   ├── test-compute.js           # Node.js 等价性测试（378 条断言，含内联副本防漂移）
+│   ├── test-compute.js           # Node.js 等价性测试（379 条断言，含内联副本防漂移）
 │   ├── inline-vue.mjs            # 构建脚本：内联 Vue 运行时
 │   ├── inline-compute.mjs        # 构建脚本：将 compute.js 重新内联回 index.html
 │   ├── inline-config.mjs         # 构建脚本：将 config.json 重新内联回 index.html
@@ -149,7 +150,7 @@ china-salary-calculator/
 ├── config.json                   # 8 城 × 2023–2026 参数（税率/专项附加，CLI 与 Web 共用）
 ├── run.bat                       # Windows 双菜单入口（CLI / Web）
 ├── run.sh                        # macOS / Linux / Termux 双菜单入口
-├── deploy-pages.bat / .sh        # 一键发布前置检查（内联一致性 + 引擎/Excel/CLI 三套断言）
+├── deploy-pages.bat / .sh        # 一键发布门禁（带 check 参数则只校验，不提交不推送）
 └── docs/                         # 定名说明、变更记录、口径比对、设计与实现文档
 ```
 
@@ -157,18 +158,21 @@ china-salary-calculator/
 
 ## 🧪 测试 / Testing
 
-计算引擎、Excel 引擎与 CLI 入口全部可回归验证，均不需联网（以下命令均在仓根目录执行）：
+计算引擎、Excel 引擎、CLI 入口与发布门禁脚本全部可回归验证，均不需联网（以下命令均在仓根目录执行）：
 
 ```bash
-node web/test-compute.js            # 378 条断言：JS 与 Python 计算一致 + 内联副本未漂移
+node web/test-compute.js            # 379 条断言：JS 与 Python 计算一致 + 内联副本未漂移
 python src/test_xlsx_writer.py      # 51 条契约断言，含“CLI 与网页 Excel 逐字节一致”
 python src/test_cli_smoke.py        # 26 条 CLI 端到端断言（驱动完整 main()，含申报基数、医疗定额、逐月薪资与反推）
+python src/test_deploy_gate.py      # 21 条门禁守卫：检查失败必须非零退出、check 模式零副作用
 ```
 
 The JS engine is numerically equivalent to the Python CLI; the .xlsx writer is a byte-for-byte
 port of its Python twin, and the contract test proves both produce the same workbook bytes.
 The CLI smoke test drives the real interactive `main()` through scripted stdin, so an
-entry-level crash cannot hide behind engine-only assertions.
+entry-level crash cannot hide behind engine-only assertions. The gate test checks the gate
+itself: a printed failure must actually produce a non-zero exit code (a cmd `exit /b` inside a
+parenthesized block silently returns 0), and `check` mode must leave the repository untouched.
 
 ---
 
@@ -182,11 +186,15 @@ entry-level crash cannot hide behind engine-only assertions.
 
 ```bash
 # Windows
- deploy-pages.bat            # 或指定远程: deploy-pages.bat gitee / github
+ deploy-pages.bat            # 校验 + 提交 + 推送（默认）
+ deploy-pages.bat check      # 只跑门禁：不提交、不推送，无任何副作用
 
 # macOS / Linux
- bash deploy-pages.sh       # 可选参数: gitee | github | both
+ bash deploy-pages.sh       # 可选参数: gitee | github | both | check
 ```
+
+> 门禁除内联副本一致性、三套断言外，还会检查**交付物漂移**：若 `index.html` 原本与已提交版本一致，
+> 而重跑内联脚本后它变了，说明仓里交付旧副本（改了源文件却忘跑内联），门禁直接非零退出。
 
 脚本会校验 PWA 文件、提交并推送到已配置的远程,然后打印各平台的启用步骤。
 

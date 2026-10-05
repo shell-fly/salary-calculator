@@ -2,10 +2,10 @@
 
 - 正式名：**工资计算器（中国）**；代码层仓库/目录标识：`china-salary-calculator`（沿用既有小写通用工程名，不另造品牌名；定名说明见 [`superpowers/specs/2026-10-04-product-naming-design.md`](superpowers/specs/2026-10-04-product-naming-design.md)）
 - 产品定位：以**参数可审计的准确性 + 零安装离线可用**为主轴；`income-calc` 仅作参考基线（为何不应继续以它为 KPI，见 [`../income-calc-assessment.md`](../income-calc-assessment.md)；逐项对照仍保留在 [`src-vs-github-repos-comparison.md`](src-vs-github-repos-comparison.md) 第十一章，并已按 2026-10-04 源码复核算正三处反向口径）
-- 升级日期：2026-09-16（v1 → v2）；2026-10-04（v2 → v3）；2026-10-04（v3 同期追加 PWA 与一键部署，见 8.7）；2026-10-04（v3.1 参数表补齐 2023/2024 年度 + 口径修正，见第九章）；2026-10-04（v3.2 逐城回到官方公告复核，见第十章）；2026-10-04（v3.3 `verified_on` 换为真实公告日 + 修正浙江自然年度滞后，见第十一章）；2026-10-04（v3.4 补齐最后三行 2025 年度公告日，见第十二章）；2026-10-04（v3.5 Excel 导出去第三方依赖 + 双引擎逐字节一致，见第十三章）；2026-10-04（v3.6 申报基数可自定义 + CLI 崩溃缺陷修复，见第十四章）；2026-10-05（v3.7 医疗固定附加费 `medical_fixed`，见第十五章）；2026-10-05（v3.8 支持 12 个月不等薪资，见第十六章）
+- 升级日期：2026-09-16（v1 → v2）；2026-10-04（v2 → v3）；2026-10-04（v3 同期追加 PWA 与一键部署，见 8.7）；2026-10-04（v3.1 参数表补齐 2023/2024 年度 + 口径修正，见第九章）；2026-10-04（v3.2 逐城回到官方公告复核，见第十章）；2026-10-04（v3.3 `verified_on` 换为真实公告日 + 修正浙江自然年度滞后，见第十一章）；2026-10-04（v3.4 补齐最后三行 2025 年度公告日，见第十二章）；2026-10-04（v3.5 Excel 导出去第三方依赖 + 双引擎逐字节一致，见第十三章）；2026-10-04（v3.6 申报基数可自定义 + CLI 崩溃缺陷修复，见第十四章）；2026-10-05（v3.7 医疗固定附加费 `medical_fixed`，见第十五章）；2026-10-05（v3.8 支持 12 个月不等薪资，见第十六章）；2026-10-05（v3.9 发布门禁可信任化：`check` 模式 + 真实退出码 + 交付物漂移守卫，见第十七章）
 - 升级前版本：v1（上海 2026 单城市单年度，`shanghai_config.json`）
 - 升级后版本：v2（8 城市 × 多年度 × 半年度 + 全套高级功能，`config.json`）
-- 最新版本：**v3.8**（v3 的跨平台单文件 Web UI + PWA + 一键部署；参数表 **8 城 × 2023–2026 全 32 行为官方公告日**；CSV/Excel 导出全部零依赖；支持自定义申报基数、医疗固定附加费与**逐月不同薪资**，见第八～十六章）
+- 最新版本：**v3.9**（v3 的跨平台单文件 Web UI + PWA + 一键发布门禁；参数表 **8 城 × 2023–2026 全 32 行为官方公告日**；CSV/Excel 导出全部零依赖；支持自定义申报基数、医疗固定附加费与**逐月不同薪资**；四套回归共 **477 条断言**，见第八～十七章）
 
 ---
 
@@ -188,22 +188,23 @@ v2 仅有命令行形态，无法在移动端（安卓 / iOS）与无 Python 环
 
 | 文件 | 说明 |
 |---|---|
-| `web/index.html` | **单文件 Web UI（约 260 KB）**，内嵌 Vue 3 运行时 + 全部计算逻辑 + Excel 引擎 + 样式 + `config.json` 数据，离线双击/浏览器打开即用，导出也不需联网 |
+| `web/index.html` | **单文件 Web UI（约 258 KB）**，内嵌 Vue 3 运行时 + 全部计算逻辑 + Excel 引擎 + 样式 + `config.json` 数据，离线双击/浏览器打开即用，导出也不需联网 |
 | `web/compute.js` | 计算引擎 JS 源（开发参考，已内联进 index.html） |
 | `src/xlsx_writer.py` ↔ `web/xlsx-writer.js` | **v3.5 新增**：零依赖 .xlsx 写入器（STORE-zip + OOXML + 手写 CRC32），两端输出逐字节一致 |
 | `src/xlsx_report.py` ↔ `web/xlsx-report.js` | **v3.5 新增**：四表报表（年度汇总/逐月明细/政策参数/年终奖对比）与 25 列定义 |
 | `src/test_xlsx_writer.py` | **v3.5 新增**：Excel 契约测试 51 条（包结构、样式、双引擎字节相同、内嵌副本未漂移） |
 | `src/test_cli_smoke.py` | **v3.6 新增**：CLI 端到端冒烟测试 26 条（脚本化 stdin 跑完整 `main()`，覆盖申报基数、医疗定额、逐月薪资与反推） |
+| `src/test_deploy_gate.py` | **v3.9 新增**：发布门禁自身的守卫 21 条（失败必须非零退出、`check` 模式零副作用、两个平台入口口径一致） |
 | `web/xlsx-sample.mjs` | 跨引擎探针：`node web/xlsx-sample.mjs [--report]` 输出与 CLI 相同的 xlsx 字节 |
 | `web/inline-xlsx.mjs` | 构建辅助脚本：将两个 Excel 模块重新内联回 `index.html`（v3.5 新增） |
-| `web/test-compute.js` | Node.js 等价性测试（378 条断言，验证 JS 与 Python 结果一致，并含内嵌副本防漂移检查） |
+| `web/test-compute.js` | Node.js 等价性测试（379 条断言，验证 JS 与 Python 结果一致，并含内嵌副本防漂移与交付物行尾稳定检查） |
 | `web/inline-vue.mjs` | 构建辅助脚本：把 Vue 运行时内联进 HTML（用函数式替换，规避 `$&` 注入） |
 | `web/inline-compute.mjs` | 构建辅助脚本：把计算引擎 `web/compute.js` 再内联到 `index.html` 的 `<script id="compute-engine">` 区块（v3.6 新增；改完引擎跑 `node web/inline-compute.mjs`，漂移由 `web/test-compute.js` 拦住） |
 | `web/inline-config.mjs` | 构建辅助脚本：把根 `config.json` 再内联到 `index.html` 的 `cfg-data` 区块（v3.1 新增；改完参数表后跑 `node web/inline-config.mjs`） |
 | `web/manifest.webmanifest` + `web/sw.js` + `web/icons/` | PWA 安装清单、离线缓存 Service Worker 与应用图标（v3 同期追加，见 8.7） |
 | `run.bat`（改） | Windows 双菜单：[1] CLI [2] Web UI |
 | `run.sh`（新） | macOS / Linux / Android Termux 双菜单 |
-| `deploy-pages.bat` / `deploy-pages.sh` | 一键部署前置检查（Windows / macOS、Linux）；v3.5 起额外校验内嵌副本一致性与 Excel 契约测试 |
+| `deploy-pages.bat` / `deploy-pages.sh` | 一键发布门禁（Windows / macOS、Linux）；v3.5 起额外校验内嵌副本一致性与 Excel 契约测试；**v3.9 新增 `check` 只校验模式（不提交不推送）与交付物漂移守卫** |
 | `.github/workflows/deploy-pages.yml` | 推送到 main/master 后自动发布 GitHub Pages |
 
 ### 8.3 技术选型与关键决策
@@ -220,7 +221,7 @@ v2 仅有命令行形态，无法在移动端（安卓 / iOS）与无 Python 环
 
 ### 8.5 验证
 
-- **单元等价性**：`web/test-compute.js` 全通过（v3 时 70+ 断言 → v3.1 157 → v3.2 191 → v3.3 277 → v3.4 316 → v3.6 345 → v3.7 361 → v3.8 378 条）；v3.5 另加 `python src/test_xlsx_writer.py` 的 51 条 Excel 契约断言；v3.6 另加 `python src/test_cli_smoke.py` 的 CLI 端到端断言（v3.8 后共 26 条）。三套合计 **455 条**。
+- **单元等价性**：`web/test-compute.js` 全通过（v3 时 70+ 断言 → v3.1 157 → v3.2 191 → v3.3 277 → v3.4 316 → v3.6 345 → v3.7 361 → v3.8 378 → v3.9 379 条）；v3.5 另加 `python src/test_xlsx_writer.py` 的 51 条 Excel 契约断言；v3.6 另加 `python src/test_cli_smoke.py` 的 CLI 端到端断言（v3.8 后共 26 条）；v3.9 另加 `python src/test_deploy_gate.py` 的 21 条门禁守卫。四套合计 **477 条**。
 - **浏览器端到端**：实际渲染为正常 UI（非原始 JS 文本），改月薪 20000→30000 结果实时刷新，4 个 Tab 正常，控制台零报错。
 - **Python 交叉验证**：上海 / 2026 / 月薪 30000 / 公积金 7% → 第 1 月到手 **24157.50**、五险一金 **5250.00**，JS 与 Python 完全一致。
 
@@ -553,6 +554,39 @@ v3.5 之前，Excel 是与 `income-calc` 仅剩的功能差距：网页端从 CD
 ### 16.5 至此的功能记分
 
 对 `income-calc` 的**能力集已全部对等**（含本轮三项），并在年终奖双方案、反推税前、雇主成本、零依赖离线 Excel/CSV、CLI、单文件免构建等 7 项上为其所无；尚余差异仅为 UI 观感完成度（向导式叙事）与两项无官方原文的数据。
+
+---
+
+## 十七、v3.9 发布门禁可信任化：`check` 模式、真实退出码与交付物漂移守卫（2026-10-05）
+
+### 17.1 背景：一个“门禁”其实拦不住任何东西
+
+本轮需求只是给 `deploy-pages.bat` / `.sh` 加一个“只校验不发布”的入口，却在验证退出码时发现：`.bat` 的**每一条失败路径都打印“失败”却返回 0**。实测三种 cmd 写法（最小复现脚本，已删）：
+
+| batch 写法 | 实测退出码 |
+|---|---|
+| `if errorlevel 1 (echo 失败 & exit /b 1)` 写在 `else` 括号块内 | **0** ❌ |
+| 两层嵌套括号块内的 `exit /b 1` | **0** ❌ |
+| 块内只置标志位，块外顶层单行 `if "!FLAG!"=="1" exit /b 1` | **1** ✅ |
+
+后果：`deploy-pages.bat && 下一步`、任何读退出码的 CI 都会把失败当通过——门禁形同虚设。
+
+### 17.2 改动
+
+1. **`.bat` 重写为子例程结构**：所有检查走 `call :xxx` + 顶层 `if errorlevel 1 exit /b 1`；错码先 `set "ERR=%ERRORLEVEL%"` 再判读（中间插 `echo` 会冲掉 `errorlevel`）。
+2. **新增 `check` 参数**（同时接受 `--check` / `-c`）：只跑 [1/5]–[3/5]，不提交、不推送、不打印发布步骤，实测零副作用（HEAD 与工作树均不变）。默认模式行为不变（仍提交并推送）。
+3. **新增交付物漂移守卫**：若 `index.html` 原本与已提交版本一致，而重跑内联脚本后变脏，即判定为“改了源文件却忘跑内联”→ 非零退出。这正是 v3.1–v3.6 踩过的坑类。
+4. **门禁不再硬编码断言条数**：旧消息里的 345 → 378 → 379 已经腐烂三次，且 `.sh` 一度落后于 `.bat`；改为只报通过/失败并指向可复跑的命令。
+5. **修掉交付物不稳定的根因**：`web/inline-*.mjs` 把 `config.json` / JS 源按原文嵌入，而 `core.autocrlf=true` 下这些源文件在开发机上是 CRLF → 每次内联都给 `index.html` 注入 353 个 CRLF，内容未变却被 `git status` 报脏。现在三个脚本统一 `toLf()` 归一化，并在 `.gitattributes` 钉上 `web/index.html text eol=lf`；重建后与 HEAD **逐字节相同（264605 bytes）**。`sw.js` 无需再提升版本（交付字节未变）。
+6. **顺手修 `inline-xlsx.mjs` 首次注入分支的非函数式 `String.replace`**（替换串里的 `$&` / `$1` 会被误解释），与既定内联安全规范对齐。
+7. **新增 `src/test_deploy_gate.py`（21 条）**：结构 lint（禁止括号块内 `exit /b`）、两个平台入口阶段与口径一致、**负向必须非零退出**、`check` 模式不产生 commit 且不改动交付物。该套件**故意不接入门禁脚本**，否则门禁会递归调用自己。
+
+### 17.3 验证
+
+- 先红：人为造漂移（改 `config.json` 但不重跑内联）→ `.bat` 与 `.sh` 均 **exit 1**（修复前 `.bat` 返回 0）；恢复后→ 均 exit 0。
+- `python src/test_deploy_gate.py`：**21 条全绿**。
+- 四套合计 **477 条**：引擎 379（新增“`index.html` 不含 CRLF”）+ Excel 契约 51 + CLI 端到端 26 + 门禁守卫 21。
+- 交付物字节稳定：`git checkout` 后重跑三个内联脚本 → 与 HEAD 完全相同且 `git status` 干净；`index.html` 体积因去掉 CRLF 从 260.4 KB 降为 **258.4 KB**。
 
 ---
 
