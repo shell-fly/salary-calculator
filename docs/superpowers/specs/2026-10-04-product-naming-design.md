@@ -2,7 +2,7 @@
 
 > 定稿日期：2026-10-04
 > 状态：已确认（用户在三个候选名中选定方案 3）
-> 关联文档：[`upgrade-changelog.md`](../../upgrade-changelog.md)、[`src-vs-github-repos-comparison.md`](../../src-vs-github-repos-comparison.md)、[`salary-calculator-calibration-report.md`](../../salary-calculator-calibration-report.md)
+> 关联文档：[`upgrade-changelog.md`](../../upgrade-changelog.md)（对标与竞品对比文档已移入私有档案，未公开）
 
 ## 1. 定名结论
 
@@ -21,7 +21,7 @@
 
 ## 2. 落地范围
 
-- **文档（三份）**：`docs/upgrade-changelog.md`、`docs/src-vs-github-repos-comparison.md`、`docs/salary-calculator-calibration-report.md`。
+- **文档（三份）**：`docs/upgrade-changelog.md` 及两份对标文档（后两者 2026-10-06 起移入私有档案，未公开）。
 - **界面与入口展示名**：`README.md` 标题、`web/index.html` 的 `<title>` **与页面内可见标题头（正式名 + 根据配置动态生成的年度摘要）**、`web/manifest.webmanifest` 的 `name`、`run.bat` / `run.sh` 窗口标题与横幅、`deploy-pages.bat` / `deploy-pages.sh` 横幅、CLI 启动横幅（`src/salary_calculator.py`）。
 - **不改**：docs 与源码文件名（避免破坏既有链接与 git 历史）、源码内英文注释与 docstring 中的 `china-salary-calculator` 工程标识、`docs/superpowers/` 下历史 spec/plan 的原文（仅加历史快照注记）。
 
@@ -37,10 +37,9 @@
 > `income-calc`”。源码复核后发现该基线选得不对（它是一个 15★ / 0 fork / 零测试的个人项目，
 > 而品类第一名仅 37★），且据此写下的结论中有三项反向。现行口径改为：
 > **以“参数可审计的准确性 + 零安装离线可用”为主轴，`income-calc` 仅作参考基线**；
-> 依据与止损判据见 [`../../../income-calc-assessment.md`](../../../income-calc-assessment.md)。
+> 依据与止损判据见内部对标评估（未公开）。
 
-原定位逐项达成情况见
-[`src-vs-github-repos-comparison.md` 第十一章与第十五章](../../src-vs-github-repos-comparison.md)：
+原定位逐项达成情况见内部对标文档（未公开；未移档前的结论摘要如下）：
 
 - **准确性**：与 income-calc 并列第一，且在年终奖月度换算表口径、医保自然年度、自然年度省份的 H1 建模、2026 年度公告落实度与 Python/JS 双引擎交叉验证五项上更强；
 - **功能**：~~income-calc 能力集已全部对等~~ → 2026-10-04 复核发现**三项落后**（自定义申报基数、医疗固定附加费、12 个月不等薪资），已分别由 **v3.6 / v3.7 / v3.8 全部补齐**，现**无功能落后项**（仅 UI 观感叙事仍逊）；另多出年终奖双方案对比、二分反推税前、单位用人成本、CSV 零依赖导出、零依赖 CLI、单文件离线 Web UI + PWA + 一键部署、零依赖且离线的 styled Excel 导出（共 7 项）；
@@ -53,9 +52,9 @@
 |---|---|---|
 | `upgrade-changelog.md` 第二章、第七章 | v1 配置"已备份至 `docs/config.v1.json.bak`" | 该文件从未存在且未被 git 跟踪；实际回退参考是仍留在仓根的 `shanghai_config.json`（v2 起代码不再读取） |
 | `upgrade-changelog.md` 8.2 / 8.6 | 交付物未含 PWA 相关文件；限制项未含年度覆盖 | 补录 `manifest.webmanifest` / `sw.js` / `icons/` / `deploy-pages.*` / `.github/workflows/deploy-pages.yml`，新增 8.7 节 |
-| `src-vs-github-repos-comparison.md` 10.3 | 把"PWA 离线缓存 + 添加到主屏"列为待改进 | 已落地，改为「已落地」并说明 `file://` 与 http(s) 双入口行为 |
-| `salary-calculator-calibration-report.md` 第四章第 5 条 | 仍写"建议做成参数表配置" | 标注 v2 已落地并指向 changelog 对应章节 |
-| `salary-calculator-calibration-report.md` 第一、五章 | 开源仓库与报告路径写作 `D:\STEM\Code\...` 绝对路径 | 改为工作区相对路径（该批仓库现与本仓同属 `ai-oss-tools/`） |
+| `src-vs-github-repos-comparison.md` 10.3（已移私有） | 把"PWA 离线缓存 + 添加到主屏"列为待改进 | 已落地，改为「已落地」并说明 `file://` 与 http(s) 双入口行为 |
+| `salary-calculator-calibration-report.md` 第四章第 5 条（已移私有） | 仍写"建议做成参数表配置" | 标注 v2 已落地并指向 changelog 对应章节 |
+| `salary-calculator-calibration-report.md` 第一、五章（已移私有） | 开源仓库与报告路径写作 `D:\STEM\Code\...` 绝对路径 | 改为工作区相对路径（该批仓库现与本仓同属 `ai-oss-tools/`） |
 
 ## 6. 验证
 

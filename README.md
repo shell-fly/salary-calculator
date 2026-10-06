@@ -4,9 +4,7 @@
 > 定名说明 / Naming decision：[`docs/superpowers/specs/2026-10-04-product-naming-design.md`](docs/superpowers/specs/2026-10-04-product-naming-design.md)
 >
 > 定位 / Positioning：以**参数可审计的准确性 + 零安装离线可用**为主轴。
-> `income-calc` 仅作参考基线而非行业标杆（依据与止损判据见
-> [`income-calc-assessment.md`](income-calc-assessment.md)；逐项源码对比见
-> [`docs/src-vs-github-repos-comparison.md`](docs/src-vs-github-repos-comparison.md) 第十一、十五章）。
+> `income-calc` 仅作参考基线而非行业标杆（对标评估、市场分析与止损判据属内部文档，未公开）。
 >
 > 中国大陆 **8 城市 × 2023–2026 四个社保年度 × 半年度** 的五险一金 + 个人所得税 + 年终奖 + 汇算清缴计算器。
 > 提供 **命令行（CLI）** 与 **跨平台单文件 Web UI** 两种形态，开箱即用、零依赖。
@@ -275,11 +273,10 @@ bash release.sh v3.11
 
 - [`docs/superpowers/specs/2026-10-04-product-naming-design.md`](docs/superpowers/specs/2026-10-04-product-naming-design.md) — 正式定名与文档口径 / product naming decision
 - [`docs/upgrade-changelog.md`](docs/upgrade-changelog.md) — v1→v2→v3 升级变更说明 / changelog
-- [`docs/salary-calculator-calibration-report.md`](docs/salary-calculator-calibration-report.md) — 与 GitHub 开源项目口径比对 / calibration report
-- [`docs/src-vs-github-repos-comparison.md`](docs/src-vs-github-repos-comparison.md) — 逐仓源码级对比：第十一章记分表、第十五章品类基线复核（含已校正的落后项）/ per-repo source-level comparison (scoring in ch.11, category-baseline re-audit in ch.15)
-- [`docs/gitee-repos-comparison.md`](docs/gitee-repos-comparison.md) — Gitee（码云）同类开源项目调研与生态对比 / Gitee-side landscape survey & positioning
-- [`income-calc-assessment.md`](income-calc-assessment.md) — `income-calc` 优劣势与商业价值评估（含“为何不应继续以它作对标 KPI”的依据与止损判据）/ benchmark & commercial-value assessment
-- [`docs/exposure-content-drafts.md`](docs/exposure-content-drafts.md) — 低成本曝光内容：知乎回答草稿 ×5（数字全部由引擎实算）与发布度量清单 / exposure content: five ready-to-post answers with engine-computed figures
+
+> 内部文档（对标评估、竞品对比、定位调研与市场策略）不随公开仓库分发，仅存于私有档案库。
+> Internal documents (benchmark assessments, competitor comparisons, positioning and
+> go-to-market notes) are kept out of this public repository and live in a private archive.
 
 ---
 
