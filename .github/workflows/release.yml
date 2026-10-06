@@ -35,6 +35,8 @@ jobs:
           node web/inline-config.mjs
           node web/inline-compute.mjs
           node web/inline-xlsx.mjs
+          node web/inline-qrcode.mjs
+          node web/test-qrcode.js
           if ! git diff --exit-code -- web/index.html; then
             echo "::error::内嵌副本漂移：源文件改了却未重跑内联。先本地跑 deploy-pages.bat check 再打 tag。"
             exit 1
@@ -55,13 +57,18 @@ jobs:
                gh release edit "$TAG" --title "工资计算器（中国）$TAG" --notes-file dist/RELEASE_NOTES.md; }
 
       - name: Publish Gitee 发行版 (soft-fail)
-        if: ${{ secrets.GITEE_TOKEN != '' }}
         continue-on-error: true
         env:
           GITEE_TOKEN: ${{ secrets.GITEE_TOKEN }}
           GITEE_OWNER: bob3703
           GITEE_REPO: salary-calculator
         run: |
+          # secrets 上下文在 step 级 if 中不可用（会导致整个工作流解析失败、0 秒退出），
+          # 所以令牌有无的判断只能放在脚本内——env 里的空值即为未配置。
+          if [ -z "$GITEE_TOKEN" ]; then
+            echo "未配置 GITEE_TOKEN，跳过 Gitee 发行版（GitHub Release 不受影响）"
+            exit 0
+          fi
           python src/gitee_release.py delete --tag "$TAG" || true
           python src/gitee_release.py publish --tag "$TAG" \
             --title "工资计算器（中国）$TAG" \
