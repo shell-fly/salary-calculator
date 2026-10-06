@@ -16,7 +16,10 @@ import subprocess
 import sys
 import zipfile
 
-PRODUCT_NAME = "工资计算器（中国）"
+# GitHub sanitizes release-asset names to ASCII (a CJK prefix came out as a bare
+# "_v3.14.html" on upload), so dist files use an ASCII slug; the display name
+# stays Chinese in release titles and docs.
+ASSET_SLUG = "china-salary-calculator"
 VERSION_RE = re.compile(r"^v\d+\.\d+(\.\d+)?$")
 
 
@@ -37,7 +40,7 @@ WEB_ICON_DIR = "web/icons"
 
 def build_names(version):
     """Return (html_name, zip_name) for a validated version string."""
-    base = "%s_%s" % (PRODUCT_NAME, version)
+    base = "%s_%s" % (ASSET_SLUG, version)
     return base + ".html", base + ".zip"
 
 

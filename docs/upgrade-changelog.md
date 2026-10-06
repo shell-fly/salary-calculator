@@ -704,6 +704,7 @@ v3.9 加 `check` 模式时暴露了旧默认行为的代价：`deploy-pages.bat`
 | `web/inline-qrcode.mjs`（新增） | 与 inline-compute 同模式：切片重写 + `export ` 前缀剥离 + `</script` 拒绝内联，LF 归一 |
 | `web/index.html` | ① 结果区 tabs 行新增「生成分享图」；② 分享卡弹窗：Canvas 900×1240 本地绘制（页头色带、到手率圆环、明细行、年终奖推荐行、**参数核验公告日一行**、二维码 + 口号），**默认脱敏**（只显示到手率与占比，不含绝对金额；「包含具体金额」为显式勾选）；下载按钮用 `toDataURL` + `a[download]`；③ 二维码 URL：http(s) 部署时取当前页面地址，`file://` 时回退 `CFG.share_url` 或 Gitee Pages 默认地址；④ **页脚信任行（常显，含 `file://`）**：「🔒 工资数据仅在本机浏览器计算，不上传任何服务器 · 代码完全开源、可审计」+ Gitee / GitHub 仓库链接（两 URL 均已验证 200 可达）——文案精确区分「计算数据不上传」与「唯一外部请求是访问计数」，不做笼统的「无网络请求」声明；⑤ 页脚访客计数（busuanzi/不蒜子），**仅在 http(s) 协议注入**，`file://` 离线副本保持零网络属性，加载失败自动隐藏；⑥ 分享卡标语同步为「代码开源 · 工资数据不上传 · 参数带官方公告日」 |
 | `deploy-pages.sh` / `.bat` / `test_deploy_gate.py` | 门禁接入 `inline-qrcode` 一致性检查与 `test-qrcode` 断言；守卫 token 元组同步（50 → 52 条，两脚本各需运行 `inline-qrcode` / `test-qrcode` 两阶段） |
+| `src/release.py` | 发行资产改用 ASCII 文件名 `china-salary-calculator_vX.Y.Z.html/.zip`：GitHub 会把非 ASCII 资产名清洗成只剩 ASCII 部分（`工资计算器（中国）_v3.14.html` 上传后变成 `_v3.14.html`）；Release 标题仍为中文「工资计算器（中国）vX.Y.Z」，`test_release.py` 六处断言同步 |
 | `docs/exposure-content-drafts.md`（新增） | 知乎回答草稿 ×5（到手多少 / 年终奖双方案 / 临界点 / 申报基数 / 反推税前），**全部数字由引擎实算**（如 36,001 年终奖多发 1 元少拿 2,309.10；144,001 少拿 13,199.20），附发布与止损度量清单 |
 
 ### 21.3 验证

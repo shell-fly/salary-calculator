@@ -261,9 +261,9 @@ release.bat v3.11
 bash release.sh v3.11
 ```
 
-产出到 `dist/`：
-- `工资计算器（中国）_v3.11.html` — 单文件免安装，任意设备双击用浏览器打开即可（离线、零依赖）。
-- `工资计算器（中国）_v3.11.zip` — 完整发行包（Web + CLI + 配置 + 运行脚本 + LICENSE）。
+产出到 `dist/`（资产名用 ASCII slug：GitHub 会清洗非 ASCII 的发行资产名，中文前缀会被丢弃）：
+- `china-salary-calculator_v3.11.html` — 单文件免安装，任意设备双击用浏览器打开即可（离线、零依赖）。
+- `china-salary-calculator_v3.11.zip` — 完整发行包（Web + CLI + 配置 + 运行脚本 + LICENSE）。
 
 脚本会先复用发布门禁（内联一致性 + 计算引擎/Excel/CLI 断言），通过后打印两平台上传步骤与可直接粘贴的 Release 文案。加 `--fast` 可跳过重型门禁（仅供调试）。`dist/` 已被 `.gitignore` 忽略。
 

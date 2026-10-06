@@ -24,10 +24,10 @@ def test_validate_version_rejects_bad_forms():
         assert not release.validate_version(bad), bad
 
 
-def test_build_names_use_product_and_version():
+def test_build_names_use_slug_and_version():
     html, zp = release.build_names("v3.11")
-    assert html == "工资计算器（中国）_v3.11.html"
-    assert zp == "工资计算器（中国）_v3.11.zip"
+    assert html == "china-salary-calculator_v3.11.html"
+    assert zp == "china-salary-calculator_v3.11.zip"
 
 
 def test_collect_zip_members_has_required_and_excludes_dev():
@@ -48,11 +48,11 @@ def test_collect_zip_members_has_required_and_excludes_dev():
 
 
 def test_render_release_notes_contains_version_and_both_assets():
-    txt = release.render_release_notes("v3.11", "工资计算器（中国）_v3.11.html",
-                                       "工资计算器（中国）_v3.11.zip")
+    txt = release.render_release_notes("v3.11", "china-salary-calculator_v3.11.html",
+                                       "china-salary-calculator_v3.11.zip")
     assert "工资计算器（中国）v3.11" in txt
-    assert "工资计算器（中国）_v3.11.html" in txt
-    assert "工资计算器（中国）_v3.11.zip" in txt
+    assert "china-salary-calculator_v3.11.html" in txt
+    assert "china-salary-calculator_v3.11.zip" in txt
     assert "Apache License 2.0" in txt or "Apache-2.0" in txt
 
 
@@ -76,8 +76,8 @@ def _run_release(args, extra_env=None):
 
 def test_fast_build_produces_dist_html_and_zip_byte_identical():
     root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    html_name = "工资计算器（中国）_v9.9.9.html"
-    zip_name = "工资计算器（中国）_v9.9.9.zip"
+    html_name = "china-salary-calculator_v9.9.9.html"
+    zip_name = "china-salary-calculator_v9.9.9.zip"
     dist = os.path.join(root, "dist")
     shutil.rmtree(dist, ignore_errors=True)
     r = _run_release(["v9.9.9", "--fast"])
@@ -118,7 +118,7 @@ def test_notes_file_written_and_absent_without_flag():
     assert os.path.isfile(nf)
     txt = open(nf, encoding="utf-8").read()
     assert "工资计算器（中国）v9.9.9" in txt
-    assert "工资计算器（中国）_v9.9.9.html" in txt and "工资计算器（中国）_v9.9.9.zip" in txt
+    assert "china-salary-calculator_v9.9.9.html" in txt and "china-salary-calculator_v9.9.9.zip" in txt
     shutil.rmtree(os.path.join(root, "dist"), ignore_errors=True)
     r2 = _run_release(["v9.9.9", "--fast"])
     assert r2.returncode == 0, r2.stdout + r2.stderr
