@@ -80,6 +80,7 @@ if command -v node >/dev/null 2>&1; then
   node web/inline-config.mjs >/dev/null || { echo "  ✗ config.json 与 index.html 内嵌副本不一致"; exit 1; }
   node web/inline-compute.mjs >/dev/null || { echo "  ✗ compute.js 与 index.html 内嵌引擎不一致"; exit 1; }
   node web/inline-xlsx.mjs  >/dev/null || { echo "  ✗ xlsx 引擎与 index.html 内嵌副本不一致"; exit 1; }
+  node web/inline-qrcode.mjs >/dev/null || { echo "  ✗ qrcode.js 与 index.html 内嵌副本不一致"; exit 1; }
   if [ "$HTML_WAS_CLEAN" = 1 ] && ! git diff --quiet -- web/index.html >/dev/null 2>&1; then
     echo "  ✗ 内嵌副本漂移: index.html 里交付的是旧副本,脚本已重新生成"
     echo "     请将 web/index.html 一并提交后再发布"
@@ -88,6 +89,8 @@ if command -v node >/dev/null 2>&1; then
   echo "  ✓ 内嵌副本已与源文件同步"
   node web/test-compute.js >/dev/null || { echo "  ✗ 计算引擎断言未通过（详情: node web/test-compute.js）"; exit 1; }
   echo "  ✓ 计算引擎断言全部通过"
+  node web/test-qrcode.js >/dev/null || { echo "  ✗ QR 编码器断言未通过（详情: node web/test-qrcode.js）"; exit 1; }
+  echo "  ✓ QR 编码器断言全部通过"
 else
   if [ "$REQUIRE_NODE" = 1 ]; then
     echo "  ✗ 失败: 未检测到 node,而 --require-node 要求内联一致性校验必须真实执行。"

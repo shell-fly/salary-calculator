@@ -88,6 +88,30 @@ input[type="number"] { width: 120px; padding: 4px 8px; border: 1px solid #ccc; b
 .result-card.owed-card { background: #fef0f0; color: #f56c6c; border: 1px solid #f56c6c; }
 .result-card.neutral-card { background: #f5f7fa; color: #909399; border: 1px solid #e0e0e0; }
 .unit-cost-info { margin-top: 12px; padding: 10px; background: #fdf6ec; border-radius: 6px; font-size: 13px; }
+.source-strip { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 8px 16px; background: #f0faf5; border-bottom: 1px solid #d9efe4; font-size: 12px; color: #17835a; }
+.source-strip b { color: #0f6b48; }
+.source-strip .linklike { border: none; background: none; color: #409eff; cursor: pointer; font-size: 12px; padding: 0; text-decoration: underline; }
+.sources-panel { padding: 12px 16px 16px; background: #fff; border-bottom: 1px solid #e0e0e0; max-height: 420px; overflow: auto; }
+.sources-panel h5 { margin: 12px 0 6px; font-size: 13px; color: #333; }
+.sources-panel table { font-size: 12px; }
+.sources-panel th, .sources-panel td { padding: 4px 8px; }
+.sources-panel .prov { color: #e6a23c; }
+.sources-panel dl { font-size: 12px; color: #555; }
+.sources-panel dt { font-weight: 600; color: #333; margin-top: 8px; }
+.sources-panel dd { margin: 2px 0 0; line-height: 1.7; }
+.tabs .share-btn { margin-left: auto; background: #22a06e; color: #fff; border: none; border-radius: 6px; padding: 6px 12px; cursor: pointer; }
+.tabs .share-btn:hover { background: #17835a; }
+.share-overlay { position: fixed; inset: 0; background: rgba(0,0,0,.45); display: flex; align-items: center; justify-content: center; z-index: 100; }
+.share-modal { background: #fff; border-radius: 12px; padding: 20px; max-height: 92vh; overflow: auto; width: min(360px, 94vw); box-shadow: 0 8px 32px rgba(0,0,0,.2); }
+.share-modal canvas { width: 100%; height: auto; border: 1px solid #eee; border-radius: 8px; margin: 10px 0; }
+.share-actions { display: flex; gap: 10px; }
+.share-actions button { flex: 1; padding: 8px 12px; border-radius: 6px; border: 1px solid #ccc; background: #fff; cursor: pointer; }
+.share-actions button.primary { background: #22a06e; border-color: #22a06e; color: #fff; }
+.share-hint { font-size: 12px; color: #909399; margin-top: 8px; }
+.page-footer { padding: 12px 16px 24px; text-align: center; font-size: 12px; color: #909399; }
+.page-footer .trust-line { line-height: 1.9; }
+.page-footer a { color: #409eff; text-decoration: none; }
+.page-footer a:hover { text-decoration: underline; }
 </style>
 </head>
 <body>
@@ -111,6 +135,37 @@ input[type="number"] { width: 120px; padding: 4px 8px; border: 1px solid #ccc; b
     <button @click="exportCSV">导出CSV</button>
     <button @click="exportExcel">导出Excel</button>
     <span style="font-size:12px;color:#909399;">{{ importStatus }}</span>
+  </div>
+
+  <!-- Parameter provenance strip: verified_on announcement dates straight from the config -->
+  <div class="source-strip" v-if="sourceStats.total">
+    ✓ {{ sourceStats.dated }}/{{ sourceStats.total }} 组城市×年度参数均标注官方公告日
+    <template v-if="currentSource">
+      · 当前 {{ currentSource.cityName }} {{ params.year }} 年公告日 <b>{{ currentSource.verifiedOn }}</b>
+      <span v-if="currentSource.provisional.length" style="color:#e6a23c;">（{{ currentSource.provisional.join('、') }}含沿用上期的暂行值）</span>
+    </template>
+    <button class="linklike" @click="showSources = !showSources">{{ showSources ? '收起来源' : '查看全部来源' }}</button>
+  </div>
+  <div class="sources-panel" v-if="showSources">
+    <table>
+      <thead><tr><th>城市</th><th>社保年度</th><th>公告日 verified_on</th><th>暂行项</th></tr></thead>
+      <tbody>
+        <tr v-for="row in sourceRows" :key="row.cityCode + '-' + row.year">
+          <td>{{ row.city }}</td>
+          <td>{{ row.year }}</td>
+          <td>{{ row.verifiedOn }}</td>
+          <td :class="{ prov: row.provisional.length }">{{ row.provisional.length ? row.provisional.join('、') : '—' }}</td>
+        </tr>
+      </tbody>
+    </table>
+    <template v-if="cfg._sources">
+      <h5>口径与文号来源（config.json → _sources）</h5>
+      <dl>
+        <template v-for="(text, key) in cfg._sources" :key="key">
+          <dt>{{ key }}</dt><dd>{{ text }}</dd>
+        </template>
+      </dl>
+    </template>
   </div>
 
   <!-- Main Layout -->
@@ -222,6 +277,7 @@ input[type="number"] { width: 120px; padding: 4px 8px; border: 1px solid #ccc; b
     <div class="panel-right">
       <div class="tabs">
         <button v-for="tab in tabs" :key="tab" :class="{active: activeTab===tab}" @click="activeTab=tab">{{ tab }}</button>
+        <button class="share-btn" @click="openShare">生成分享图</button>
       </div>
 
       <!-- Tab: 月度明细 -->
@@ -336,6 +392,32 @@ input[type="number"] { width: 120px; padding: 4px 8px; border: 1px solid #ccc; b
         <p v-else style="color:#909399;">请先设置参数</p>
       </div>
     </div>
+  </div>
+
+  <!-- Share card modal: canvas-drawn, anonymized by default, QR back-link -->
+  <div class="share-overlay" v-if="shareOpen" @click.self="shareOpen = false">
+    <div class="share-modal">
+      <h4 style="margin-bottom:8px;">生成分享图</h4>
+      <label style="font-size:13px;display:flex;align-items:center;gap:6px;">
+        <input type="checkbox" v-model="shareWithAmounts" style="width:auto;" @change="drawShare">
+        包含具体金额（默认脱敏，只显示比例）
+      </label>
+      <canvas id="share-canvas" width="900" height="1240"></canvas>
+      <div class="share-actions">
+        <button class="primary" @click="downloadShare">下载图片</button>
+        <button @click="shareOpen = false">关闭</button>
+      </div>
+      <p class="share-hint">长按或右键图片也可保存；脱敏图不含工资数额，可放心转发。</p>
+    </div>
+  </div>
+
+  <div class="page-footer">
+    <div class="trust-line">🔒 工资数据仅在本机浏览器计算，不上传任何服务器 · 代码完全开源、可审计：
+      <a href="https://gitee.com/bob3703/salary-calculator" target="_blank" rel="noopener">Gitee</a> ·
+      <a href="https://github.com/shell-fly/salary-calculator" target="_blank" rel="noopener">GitHub</a>
+      · 计算结果仅供测算，权威数值以官方公布为准
+    </div>
+    <div id="site-stats" hidden>本页被访问 <span id="busuanzi_value_site_pv">–</span> 次 · <span id="busuanzi_value_site_uv">–</span> 位访客（访问计数不含任何计算数据）</div>
   </div>
 </div>
 
@@ -1599,11 +1681,348 @@ function buildReport(ctx) {
 }
 </script>
 
+<!-- Inline QR encoder (from qrcode.js, export keyword removed) -->
+<script id="qrcode-encoder">
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2026 bob3703
+// Licensed under the Apache License, Version 2.0. See the LICENSE file for the full text.
+// web/qrcode.js — minimal QR encoder, byte mode only, versions 1-4, EC levels L/M.
+//
+// Written for the share card so the Web UI keeps its zero-third-party property: no CDN,
+// no npm install. Encodes UTF-8 text (up to 78 bytes at v4-L / 62 at v4-M — any deploy
+// URL fits) and returns the module matrix for canvas drawing.
+//
+// Scope is deliberately narrow: byte mode only (no alphanumeric/kanji), versions 1-4
+// (below v7 there are no version-info blocks), L/M only (all RS block layouts are even).
+// Everything else follows ISO/IEC 18004: BCH(15,5) format info, Reed-Solomon over
+// GF(256) with 0x11D, zigzag placement, and the four standard mask-penalty rules for
+// auto selection. web/test-qrcode.js cross-checks every fixed-mask matrix against
+// fixtures generated by the Python `qrcode` reference library
+// (web/test-qrcode-fixtures.json).
+
+const VERSIONS = {
+  // version: { size, cap: max payload bytes per EC, rs: per EC [blocks, totalPerBlock, dataPerBlock], align: alignment center (0 = none) }
+  1: { size: 21, cap: { L: 17, M: 14 }, rs: { L: [1, 26, 19], M: [1, 26, 16] }, align: 0 },
+  2: { size: 25, cap: { L: 32, M: 26 }, rs: { L: [1, 44, 34], M: [1, 44, 28] }, align: 18 },
+  3: { size: 29, cap: { L: 53, M: 42 }, rs: { L: [1, 70, 55], M: [1, 70, 44] }, align: 22 },
+  4: { size: 33, cap: { L: 78, M: 62 }, rs: { L: [1, 100, 80], M: [2, 50, 32] }, align: 26 },
+};
+
+// ---------------------------------------------------------------- GF(256), poly 0x11D
+const EXP = new Uint8Array(512);
+const LOG = new Uint8Array(256);
+(() => {
+  let x = 1;
+  for (let i = 0; i < 255; i++) {
+    EXP[i] = x;
+    LOG[x] = i;
+    x <<= 1;
+    if (x & 0x100) x ^= 0x11d;
+  }
+  for (let i = 255; i < 512; i++) EXP[i] = EXP[i - 255];
+})();
+
+function gmul(a, b) {
+  return a === 0 || b === 0 ? 0 : EXP[LOG[a] + LOG[b]];
+}
+
+// Generator polynomial, highest degree first, monic (gen[0] === 1).
+function rsGenerator(degree) {
+  let poly = [1];
+  for (let i = 0; i < degree; i++) {
+    const next = new Array(poly.length + 1).fill(0);
+    for (let j = 0; j < poly.length; j++) {
+      next[j] ^= poly[j];
+      next[j + 1] ^= gmul(poly[j], EXP[i]);
+    }
+    poly = next;
+  }
+  return poly;
+}
+
+function rsRemainder(dataBlocks, ecLen) {
+  const gen = rsGenerator(ecLen);
+  return dataBlocks.map((block) => {
+    const rem = new Uint8Array(ecLen);
+    for (const byte of block) {
+      const factor = byte ^ rem[0];
+      rem.copyWithin(0, 1);
+      rem[ecLen - 1] = 0;
+      if (factor !== 0) {
+        for (let i = 0; i < ecLen; i++) rem[i] ^= gmul(gen[i + 1], factor);
+      }
+    }
+    return Array.from(rem);
+  });
+}
+
+// ---------------------------------------------------------------- bit stream + interleaving
+function buildCodewords(text, spec, ecLevel, ecLen) {
+  const bytes = Array.from(new TextEncoder().encode(text));
+  if (bytes.length > spec.cap[ecLevel]) {
+    throw new Error(`QR: payload is ${bytes.length} bytes, exceeds ${spec.cap[ecLevel]} (${ecLevel})`);
+  }
+  const bits = [];
+  const push = (value, count) => {
+    for (let i = count - 1; i >= 0; i--) bits.push((value >>> i) & 1);
+  };
+  push(0b0100, 4); // byte mode indicator
+  push(bytes.length, 8); // character count (8 bits for versions 1-9)
+  bytes.forEach((b) => push(b, 8));
+  push(0, Math.min(4, 8 - (bits.length % 8))); // terminator: up to 4 zero bits
+  while (bits.length % 8 !== 0) bits.push(0); // byte alignment
+  const data = [];
+  for (let i = 0; i < bits.length; i += 8) {
+    let b = 0;
+    for (let j = 0; j < 8; j++) b = (b << 1) | bits[i + j];
+    data.push(b);
+  }
+  const [blocks, totalPerBlock, dataPerBlock] = spec.rs[ecLevel];
+  const totalData = dataPerBlock * blocks;
+  for (let pad = 0xec; data.length < totalData; pad = pad === 0xec ? 0x11 : 0xec) data.push(pad);
+
+  const dataBlocks = [];
+  for (let b = 0; b < blocks; b++) dataBlocks.push(data.slice(b * dataPerBlock, (b + 1) * dataPerBlock));
+  const ecBlocks = rsRemainder(dataBlocks, ecLen);
+
+  const out = [];
+  for (let i = 0; i < dataPerBlock; i++) dataBlocks.forEach((blk) => out.push(blk[i]));
+  for (let i = 0; i < ecLen; i++) ecBlocks.forEach((blk) => out.push(blk[i]));
+  return out;
+}
+
+// ---------------------------------------------------------------- format info (BCH 15,5)
+const G15 = 0x537;
+const G15_MASK = 0x5412;
+const EC_BITS = { L: 0b01, M: 0b00 };
+
+function bchDigit(value) {
+  let d = 0;
+  while (value !== 0) {
+    d++;
+    value >>>= 1;
+  }
+  return d;
+}
+
+function formatBits(ecLevel, mask) {
+  const data = (EC_BITS[ecLevel] << 3) | mask;
+  let d = data << 10;
+  while (bchDigit(d) - bchDigit(G15) >= 0) {
+    d ^= G15 << (bchDigit(d) - bchDigit(G15));
+  }
+  return ((data << 10) | d) ^ G15_MASK;
+}
+
+// ---------------------------------------------------------------- masks + penalty
+const MASKS = [
+  (r, c) => (r + c) % 2 === 0,
+  (r) => r % 2 === 0,
+  (r, c) => c % 3 === 0,
+  (r, c) => (r + c) % 3 === 0,
+  (r, c) => (Math.floor(r / 2) + Math.floor(c / 3)) % 2 === 0,
+  (r, c) => ((r * c) % 2) + ((r * c) % 3) === 0,
+  (r, c) => (((r * c) % 2) + ((r * c) % 3)) % 2 === 0,
+  (r, c) => (((r + c) % 2) + ((r * c) % 3)) % 2 === 0,
+];
+
+// ISO/IEC 18004 penalty rules N1-N4, lower is better.
+function maskPenalty(modules, size) {
+  let penalty = 0;
+  // N1: runs of >= 5 same-colour modules, rows and columns
+  for (let axis = 0; axis < 2; axis++) {
+    for (let i = 0; i < size; i++) {
+      let run = 1;
+      for (let j = 1; j < size; j++) {
+        const cur = axis === 0 ? modules[i][j] : modules[j][i];
+        const prev = axis === 0 ? modules[i][j - 1] : modules[j - 1][i];
+        if (cur === prev) {
+          run++;
+        } else {
+          if (run >= 5) penalty += 3 + (run - 5);
+          run = 1;
+        }
+      }
+      if (run >= 5) penalty += 3 + (run - 5);
+    }
+  }
+  // N2: 2x2 blocks of the same colour
+  for (let r = 0; r < size - 1; r++) {
+    for (let c = 0; c < size - 1; c++) {
+      const v = modules[r][c];
+      if (v === modules[r][c + 1] && v === modules[r + 1][c] && v === modules[r + 1][c + 1]) penalty += 3;
+    }
+  }
+  // N3: 1011101 with 0000 on either side, both directions
+  const patternA = [true, false, true, true, true, false, true, false, false, false, false];
+  const patternB = [false, false, false, false, true, false, true, true, true, false, true];
+  const matchesAt = (get) => {
+    let count = 0;
+    for (let i = 0; i < size; i++) {
+      for (let j = 0; j + 11 <= size; j++) {
+        let a = true, b = true;
+        for (let k = 0; k < 11; k++) {
+          const v = get(i, j + k);
+          if (v !== patternA[k]) a = false;
+          if (v !== patternB[k]) b = false;
+          if (!a && !b) break;
+        }
+        if (a) count++;
+        if (b) count++;
+      }
+    }
+    return count;
+  };
+  penalty += matchesAt((r, c) => modules[r][c]) * 40;
+  penalty += matchesAt((r, c) => modules[c][r]) * 40;
+  // N4: dark-module ratio deviation from 50%
+  let dark = 0;
+  for (let r = 0; r < size; r++) for (let c = 0; c < size; c++) if (modules[r][c]) dark++;
+  const ratio = (dark * 100) / (size * size);
+  penalty += Math.floor(Math.abs(ratio - 50) / 5) * 10;
+  return penalty;
+}
+
+// ---------------------------------------------------------------- matrix construction
+function buildMatrix(spec, ecLevel, mask, codewords) {
+  const size = spec.size;
+  const modules = Array.from({ length: size }, () => new Array(size).fill(null));
+  const inBounds = (r, c) => r >= 0 && r < size && c >= 0 && c < size;
+
+  // finder patterns (7x7) + separators (the surrounding ring stays light)
+  const finder = (row, col) => {
+    for (let r = -1; r <= 7; r++) {
+      for (let c = -1; c <= 7; c++) {
+        const rr = row + r, cc = col + c;
+        if (!inBounds(rr, cc)) continue;
+        const inCore = r >= 0 && r <= 6 && c >= 0 && c <= 6;
+        if (!inCore) {
+          modules[rr][cc] = false; // separator
+        } else {
+          modules[rr][cc] = (r === 0 || r === 6 || c === 0 || c === 6) || (r >= 2 && r <= 4 && c >= 2 && c <= 4);
+        }
+      }
+    }
+  };
+  finder(0, 0);
+  finder(0, size - 7);
+  finder(size - 7, 0);
+
+  // timing patterns
+  for (let i = 8; i < size - 8; i++) {
+    if (modules[6][i] === null) modules[6][i] = i % 2 === 0;
+    if (modules[i][6] === null) modules[i][6] = i % 2 === 0;
+  }
+
+  // alignment pattern (single 5x5, versions 2+; the overlapping ones are inside finders already)
+  if (spec.align) {
+    const a = spec.align;
+    for (let r = -2; r <= 2; r++) {
+      for (let c = -2; c <= 2; c++) {
+        modules[a + r][a + c] = Math.max(Math.abs(r), Math.abs(c)) !== 1;
+      }
+    }
+  }
+
+  // reserve format-info cells + the dark module
+  for (let i = 0; i <= 8; i++) {
+    if (i !== 6) {
+      if (modules[8][i] === null) modules[8][i] = false;
+      if (modules[i][8] === null) modules[i][8] = false;
+    }
+  }
+  for (let i = 0; i < 8; i++) {
+    if (modules[8][size - 1 - i] === null) modules[8][size - 1 - i] = false;
+    if (modules[size - 1 - i][8] === null) modules[size - 1 - i][8] = false;
+  }
+  modules[size - 8][8] = true; // dark module
+
+  // data into the remaining null cells, zigzag from bottom-right, skipping column 6
+  const maskFn = MASKS[mask];
+  let inc = -1;
+  let row = size - 1;
+  let bitIndex = 7;
+  let byteIndex = 0;
+  for (let col = size - 1; col > 0; col -= 2) {
+    if (col === 6) col--;
+    for (;;) {
+      for (let c = 0; c < 2; c++) {
+        if (modules[row][col - c] === null) {
+          let dark = false;
+          if (byteIndex < codewords.length) dark = ((codewords[byteIndex] >>> bitIndex) & 1) === 1;
+          if (maskFn(row, col - c)) dark = !dark;
+          modules[row][col - c] = dark;
+          bitIndex--;
+          if (bitIndex === -1) {
+            byteIndex++;
+            bitIndex = 7;
+          }
+        }
+      }
+      row += inc;
+      if (row < 0 || row >= size) {
+        row -= inc;
+        inc = -inc;
+        break;
+      }
+    }
+  }
+
+  // format info, two copies
+  const bits = formatBits(ecLevel, mask);
+  for (let i = 0; i < 15; i++) {
+    const dark = ((bits >> i) & 1) === 1;
+    if (i < 6) modules[i][8] = dark; // copy 1: around the top-left finder
+    else if (i < 8) modules[i + 1][8] = dark;
+    else modules[size - 15 + i][8] = dark; // below the bottom-left finder
+  }
+  for (let i = 0; i < 15; i++) {
+    const dark = ((bits >> i) & 1) === 1;
+    if (i < 8) modules[8][size - 1 - i] = dark; // copy 2: left of the top-right finder
+    else if (i < 9) modules[8][15 - i] = dark;
+    else modules[8][14 - i] = dark; // split around the top-left finder
+  }
+  modules[size - 8][8] = true; // re-assert the dark module
+
+  return modules;
+}
+
+/**
+ * Encode `text` into a QR matrix.
+ * opts.ec: 'L' | 'M' (default 'M'); opts.mask: 0-7 to force one, otherwise auto-select
+ * by the standard penalty rules (ties keep the lowest mask id).
+ * Returns { size, modules } where modules[r][c] is true for dark.
+ */
+function qrMatrix(text, opts = {}) {
+  const ecLevel = opts.ec === 'L' ? 'L' : 'M';
+  const payload = new TextEncoder().encode(text).length;
+  let spec = null;
+  for (const v of [1, 2, 3, 4]) {
+    if (payload <= VERSIONS[v].cap[ecLevel]) {
+      spec = VERSIONS[v];
+      break;
+    }
+  }
+  if (!spec) throw new Error(`QR: payload is ${payload} bytes, exceeds 78 (L) / 62 (M) at version 4`);
+  const [, , dataPerBlock] = spec.rs[ecLevel];
+  const ecLen = spec.rs[ecLevel][1] - dataPerBlock;
+  const codewords = buildCodewords(text, spec, ecLevel, ecLen);
+  const candidates = opts.mask >= 0 ? [opts.mask] : [0, 1, 2, 3, 4, 5, 6, 7];
+  let best = null;
+  for (const mask of candidates) {
+    const modules = buildMatrix(spec, ecLevel, mask, codewords);
+    const penalty = opts.mask >= 0 ? 0 : maskPenalty(modules, spec.size);
+    if (best === null || penalty < best.penalty) best = { size: spec.size, modules, penalty };
+  }
+  return { size: best.size, modules: best.modules };
+}
+</script>
+
 <!-- Vue Application -->
 <script>
 const CFG = JSON.parse(document.getElementById('cfg-data').textContent);
 
-const { createApp, reactive, computed, ref } = Vue;
+const { createApp, reactive, computed, ref, nextTick } = Vue;
 
 const app = createApp({
   setup() {
@@ -1924,6 +2343,53 @@ const app = createApp({
       }
     }
 
+    // --- Parameter provenance: surface the config's verified_on / _sources ---
+    const showSources = ref(false);
+    function yearProvisionalHalves(yr) {
+      const out = [];
+      if (yr && yr.h1 && yr.h1.provisional) out.push('上半年');
+      if (yr && yr.h2 && yr.h2.provisional) out.push('下半年');
+      return out;
+    }
+    const sourceRows = computed(() => {
+      const rows = [];
+      const cities = cfg.cities || {};
+      Object.keys(cities).forEach(code => {
+        const c = cities[code] || {};
+        const years = Object.keys(c.years || {}).map(Number).sort((a, b) => b - a);
+        years.forEach(y => {
+          const yr = (c.years || {})[y] || {};
+          rows.push({
+            cityCode: code, city: c.name || code, year: y,
+            verifiedOn: yr.verified_on || '—',
+            provisional: yearProvisionalHalves(yr),
+          });
+        });
+      });
+      return rows;
+    });
+    const sourceStats = computed(() => {
+      const rows = sourceRows.value;
+      const dates = rows.map(r => r.verifiedOn).filter(d => d !== '—').sort();
+      return {
+        total: rows.length,
+        dated: dates.length,
+        oldest: dates[0] || '',
+        newest: dates[dates.length - 1] || '',
+      };
+    });
+    const currentSource = computed(() => {
+      const c = (cfg.cities || {})[params.city];
+      if (!c) return null;
+      const yr = (c.years || {})[params.year];
+      if (!yr) return null;
+      return {
+        cityName: c.name || params.city,
+        verifiedOn: yr.verified_on || '—',
+        provisional: yearProvisionalHalves(yr),
+      };
+    });
+
     // --- Inverse Calculation (T6) ---
     const inverseResult = ref(null);
     let _inverseTimer = null;
@@ -2009,6 +2475,169 @@ const app = createApp({
       importStatus.value = `已导出 Excel（四个工作表，${(bytes / 1024).toFixed(0)} KB）`;
     }
 
+    // --- Share card: canvas-drawn, anonymized by default, QR back-link (v3.13) ---
+    const shareOpen = ref(false);
+    const shareWithAmounts = ref(false);
+
+    function shareUrl() {
+      if (location.protocol === 'http:' || location.protocol === 'https:') {
+        return location.origin + location.pathname;
+      }
+      // file:// offline copy: fall back to the configured deploy URL.
+      return (typeof CFG.share_url === 'string' && CFG.share_url) || 'https://bob3703.gitee.io/salary-calculator/';
+    }
+
+    function drawQr(ctx, url, x, y, px) {
+      const { size, modules } = qrMatrix(url, { ec: 'M' });
+      const quiet = 2;
+      const cell = px / (size + quiet * 2);
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(x, y, px, px);
+      ctx.fillStyle = '#1a1a1a';
+      for (let r = 0; r < size; r++) {
+        for (let c = 0; c < size; c++) {
+          if (modules[r][c]) {
+            ctx.fillRect(x + (c + quiet) * cell, y + (r + quiet) * cell, cell + 0.5, cell + 0.5);
+          }
+        }
+      }
+    }
+
+    function drawShare() {
+      const canvas = document.getElementById('share-canvas');
+      if (!canvas) return;
+      const md = monthDetail.value;
+      if (!md) return;
+      const src = currentSource.value;
+      const withAmounts = shareWithAmounts.value;
+      const ctx = canvas.getContext('2d');
+      const W = canvas.width;
+      const SANS = '-apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft YaHei", sans-serif';
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+      // header band
+      const grad = ctx.createLinearGradient(0, 0, canvas.width, 0);
+      grad.addColorStop(0, '#22a06e');
+      grad.addColorStop(1, '#17835a');
+      ctx.fillStyle = grad;
+      ctx.fillRect(0, 0, canvas.width, 150);
+      ctx.fillStyle = '#ffffff';
+      ctx.font = `600 46px ${SANS}`;
+      ctx.fillText('工资计算器（中国）', 48, 70);
+      ctx.globalAlpha = 0.92;
+      ctx.font = `30px ${SANS}`;
+      ctx.fillText(`${session.value.city_name} · ${params.year} 年 · 第${md.month_no}月`, 48, 120);
+      ctx.globalAlpha = 1;
+
+      // take-home-rate ring
+      const rate = md.salary > 0 ? (md.net / md.salary) * 100 : 0;
+      const cx = W / 2, cy = 430, r = 150;
+      ctx.lineWidth = 54;
+      ctx.strokeStyle = '#eef2f0';
+      ctx.beginPath();
+      ctx.arc(cx, cy, r, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.strokeStyle = '#22a06e';
+      ctx.lineCap = 'round';
+      ctx.beginPath();
+      ctx.arc(cx, cy, r, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * Math.min(1, Math.max(0, rate / 100)));
+      ctx.stroke();
+      ctx.lineCap = 'butt';
+      ctx.textAlign = 'center';
+      ctx.fillStyle = '#17835a';
+      ctx.font = `700 84px ${SANS}`;
+      ctx.fillText(`${rate.toFixed(1)}%`, cx, cy);
+      ctx.fillStyle = '#666666';
+      ctx.font = `32px ${SANS}`;
+      ctx.fillText('到手率', cx, cy + 62);
+      ctx.textAlign = 'left';
+      if (!withAmounts) {
+        ctx.fillStyle = '#e6a23c';
+        ctx.font = `26px ${SANS}`;
+        ctx.textAlign = 'center';
+        ctx.fillText('脱敏分享 · 不含具体金额', cx, 642);
+        ctx.textAlign = 'left';
+      }
+
+      // breakdown rows (amounts only after the explicit opt-in)
+      const pct = (v) => (md.salary > 0 ? `${(v / md.salary * 100).toFixed(1)}%` : '—');
+      const rows = withAmounts
+        ? [
+            ['税前月薪', `¥${fmt(md.salary)}`],
+            ['五险一金（个人）', `−¥${fmt(md.social_p_total)}`],
+            ['个人所得税', `−¥${fmt(md.month_tax)}`],
+            ['实发到手', `¥${fmt(md.net)}`],
+          ]
+        : [
+            ['税前月薪', '100%'],
+            ['五险一金（个人）', `−${pct(md.social_p_total)}`],
+            ['个人所得税', `−${pct(md.month_tax)}`],
+            ['实发到手', pct(md.net)],
+          ];
+      let y = 660;
+      rows.forEach(([label, value], i) => {
+        const isNet = i === rows.length - 1;
+        ctx.fillStyle = isNet ? '#17835a' : '#333333';
+        ctx.font = isNet ? `700 40px ${SANS}` : `34px ${SANS}`;
+        ctx.fillText(label, 120, y);
+        ctx.textAlign = 'right';
+        ctx.fillText(value, W - 120, y);
+        ctx.textAlign = 'left';
+        y += isNet ? 76 : 62;
+      });
+
+      // bonus recommendation (when a bonus is entered)
+      if (bonusResult.value) {
+        const br = bonusResult.value;
+        const preferSeparate = br.totalA <= br.totalB;
+        const text = preferSeparate
+          ? (withAmounts ? `年终奖推荐：单独计税，省 ¥${fmt(br.totalB - br.totalA)}` : '年终奖推荐：单独计税')
+          : (withAmounts ? `年终奖推荐：并入综合所得，省 ¥${fmt(br.totalA - br.totalB)}` : '年终奖推荐：并入综合所得');
+        ctx.fillStyle = '#409eff';
+        ctx.font = `600 30px ${SANS}`;
+        ctx.fillText(text, 120, 926);
+      }
+
+      // provenance line — the auditable-params advantage, on the card itself
+      if (src) {
+        ctx.fillStyle = '#17835a';
+        ctx.font = `26px ${SANS}`;
+        ctx.fillText(`参数已核验 · 社保基数公告日 ${src.verifiedOn}${src.provisional.length ? '（含暂行值）' : ''}`, 120, 982);
+      }
+
+      // footer: QR back-link + slogan
+      drawQr(ctx, shareUrl(), 120, 1035, 160);
+      ctx.fillStyle = '#333333';
+      ctx.font = `700 34px ${SANS}`;
+      ctx.fillText('扫码算你的到手率', 320, 1090);
+      ctx.fillStyle = '#666666';
+      ctx.font = `24px ${SANS}`;
+      ctx.fillText(shareUrl(), 320, 1128);
+      ctx.fillStyle = '#999999';
+      ctx.fillText('代码开源 · 工资数据不上传 · 参数带官方公告日', 320, 1164);
+    }
+
+    function openShare() {
+      if (!monthDetail.value) {
+        importStatus.value = '请先设置参数';
+        return;
+      }
+      shareOpen.value = true;
+      nextTick(drawShare);
+    }
+
+    function downloadShare() {
+      const canvas = document.getElementById('share-canvas');
+      if (!canvas) return;
+      const link = document.createElement('a');
+      link.download = `到手率分享_${params.city}_${params.year}.png`;
+      link.href = canvas.toDataURL('image/png');
+      link.click();
+      importStatus.value = '分享图已生成并触发下载（长按 / 右键图片也可保存）';
+    }
+
     return {
       cfg, params, activeTab, tabs, importStatus, showEmployer,
       deductionDefs, isDeductionEnabled, toggleDeduction, getDeductionAmount,
@@ -2019,12 +2648,27 @@ const app = createApp({
       settlementResult, settlementData,
       inverseResult, onInverseInput,
       onCityChange, importConfig, exportCSV, exportExcel,
+      showSources, sourceRows, sourceStats, currentSource,
+      shareOpen, shareWithAmounts, openShare, drawShare, downloadShare,
       fmt,
     };
   }
 });
 
 app.mount('#app');
+
+// Visitor counter: progressive enhancement only — loaded exclusively over http(s),
+// never from file://, so the offline copy keeps its zero-network property.
+(() => {
+  if (location.protocol !== 'http:' && location.protocol !== 'https:') return;
+  const stats = document.getElementById('site-stats');
+  if (stats) stats.hidden = false;
+  const script = document.createElement('script');
+  script.src = 'https://busuanzi.ibruce.info/busuanzi/2.3/busuanzi.pure.mini.js';
+  script.async = true;
+  script.onerror = () => { if (stats) stats.hidden = true; };
+  document.head.appendChild(script);
+})();
 </script>
 <script>
 // Register the service worker only when served over http(s).

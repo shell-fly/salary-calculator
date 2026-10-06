@@ -227,6 +227,11 @@ set "ERR=%ERRORLEVEL%"
 if not "%ERR%"=="0" echo   失败: xlsx 引擎与 index.html 内嵌副本不一致
 if not "%ERR%"=="0" exit /b 1
 
+node web\inline-qrcode.mjs >nul 2>&1
+set "ERR=%ERRORLEVEL%"
+if not "%ERR%"=="0" echo   失败: qrcode.js 与 index.html 内嵌副本不一致
+if not "%ERR%"=="0" exit /b 1
+
 set "DRIFT="
 if defined HTML_WAS_CLEAN call :check_drift
 if defined DRIFT echo   失败: 内嵌副本漂移,index.html 里交付的是旧副本(脚本已重新生成)
@@ -239,6 +244,12 @@ set "ERR=%ERRORLEVEL%"
 if not "%ERR%"=="0" echo   失败: 计算引擎断言未通过(详情: node web\test-compute.js)
 if not "%ERR%"=="0" exit /b 1
 echo   OK  计算引擎断言全部通过
+
+node web\test-qrcode.js >nul 2>&1
+set "ERR=%ERRORLEVEL%"
+if not "%ERR%"=="0" echo   失败: QR 编码器断言未通过(详情: node web\test-qrcode.js)
+if not "%ERR%"=="0" exit /b 1
+echo   OK  QR 编码器断言全部通过
 exit /b 0
 
 :check_drift

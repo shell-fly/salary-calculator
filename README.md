@@ -40,6 +40,12 @@
   Inverse calculation: derive gross from a target net.
 - **导出**：CSV 与带样式的 Excel（.xlsx），**两者均零第三方依赖**。
   CSV / styled .xlsx — both generated with no third-party library (no `openpyxl`, no CDN).
+- **参数来源可视化**：页面常显「N/N 组城市×年度参数均标注官方公告日」与当前公告日，可展开 8 城 × 4 年度共 32 行全量溯源表及 `_sources` 文号说明（暂行值橙色提示）；导入外部配置后自动刷新。
+  Parameter provenance in the UI: an always-visible strip shows the official announcement date behind the selected city×year, expandable to the full 32-row dated table with source notes.
+- **开源信任页脚**：常显「工资数据仅在本机浏览器计算，不上传任何服务器」与 Gitee / GitHub 仓库链接——所有计算与导出均在本地完成，唯一的外部请求是 http(s) 部署下的匿名访问计数（`file://` 打开时连计数也没有），声明与实现严格一致。
+  Open-source trust footer: the page states that salary data never leaves the browser and links both repos. All computation is local; the only external request on http(s) deploys is an anonymous visit counter (absent entirely on `file://`).
+- **分享图生成**：一键生成「到手率」分享卡——Canvas 本地绘制、**默认脱敏**（只显示到手率与各项占比，不含工资数额，金额可显式开启）、内嵌**零依赖二维码**（自研编码器，v1–4 字节模式，经 Python `qrcode` 参考实现 128 组矩阵逐位交叉验证）扫码回到本工具，形成"看到 → 扫码 → 再分享"闭环。
+  Shareable result card: canvas-drawn take-home-rate card, anonymized by default, with a built-in zero-dependency QR code linking back to the tool.
 - **8 城市 / 8 cities**：上海、北京、广州、杭州、深圳、南京、合肥、芜湖。
 - **四个社保年度 / 4 policy years**：2023–2026，每年分上半年/下半年两段基数，按月自动切换。
 
@@ -60,10 +66,10 @@ Open `web/index.html` directly in any browser — **nothing to install**.
 | Android | 把 `web/index.html` 传到手机，用 Chrome 打开（或 Termux 内 `bash run.sh`） |
 | iPhone / iPad | 通过 AirDrop / 文件 App / iCloud 传输后用 Safari 打开 |
 
-- 单文件自包含（约 258 KB），**离线可用**；参数改动实时刷新所有结果，CSV / Excel 导出也完全离线完成。
+- 单文件自包含（约 283 KB），**离线可用**；结果实时刷新，CSV / Excel / 分享图导出完全离线完成。
 - 想更新城市/年度数据：点击页面「导入配置」选择外部 `config.json` 覆盖内嵌默认值。
-- Self-contained single file (~258 KB), **works offline**; results update in real time as you edit
-  inputs, and both the CSV and Excel exports work fully offline as well.
+- Self-contained single file (~283 KB), **works offline**; results update in real time as you edit
+  inputs, and the CSV / Excel / share-card exports all work fully offline as well.
 - To update city/year data: click "导入配置 / Import" and select an external `config.json`.
 
 ### 方式二：CLI（需 Python 3）/ Option 2: CLI (requires Python 3)
@@ -139,6 +145,10 @@ china-salary-calculator/
 │   ├── xlsx-writer.js            # Excel 写入器 JS 源（与 Python 版输出一致）
 │   ├── xlsx-report.js            # 四表报表 JS 源（含 25 列定义）
 │   ├── xlsx-sample.mjs           # 跨引擎探针：node web/xlsx-sample.mjs [--report]
+│   ├── qrcode.js                 # 零依赖二维码编码器（字节模式 v1–4 / L·M，分享卡用）
+│   ├── test-qrcode.js            # QR 交叉验证（128 组矩阵 × 8 掩码对 Python qrcode 参考实现）
+│   ├── test-qrcode-fixtures.json # 上述验证的基准矩阵（由 Python qrcode 生成）
+│   ├── inline-qrcode.mjs         # 构建脚本：将 qrcode.js 重新内联回 index.html
 │   ├── test-compute.js           # Node.js 等价性测试（379 条断言，含内联副本防漂移）
 │   ├── inline-vue.mjs            # 构建脚本：内联 Vue 运行时
 │   ├── inline-compute.mjs        # 构建脚本：将 compute.js 重新内联回 index.html
@@ -162,9 +172,10 @@ china-salary-calculator/
 
 ```bash
 node web/test-compute.js            # 379 条断言：JS 与 Python 计算一致 + 内联副本未漂移
+node web/test-qrcode.js             # 145 条断言：QR 编码器与 Python qrcode 参考实现逐位一致
 python src/test_xlsx_writer.py      # 51 条契约断言，含“CLI 与网页 Excel 逐字节一致”
 python src/test_cli_smoke.py        # 26 条 CLI 端到端断言（驱动完整 main()，含申报基数、医疗定额、逐月薪资与反推）
-python src/test_deploy_gate.py      # 50 条门禁守卫：失败必须非零退出、不代提交、check 零副作用、缺 node 时 --require-node 必须硬失败
+python src/test_deploy_gate.py      # 52 条门禁守卫：失败必须非零退出、不代提交、check 零副作用、缺 node 时 --require-node 必须硬失败
 ```
 
 The JS engine is numerically equivalent to the Python CLI; the .xlsx writer is a byte-for-byte
@@ -268,6 +279,7 @@ bash release.sh v3.11
 - [`docs/src-vs-github-repos-comparison.md`](docs/src-vs-github-repos-comparison.md) — 逐仓源码级对比：第十一章记分表、第十五章品类基线复核（含已校正的落后项）/ per-repo source-level comparison (scoring in ch.11, category-baseline re-audit in ch.15)
 - [`docs/gitee-repos-comparison.md`](docs/gitee-repos-comparison.md) — Gitee（码云）同类开源项目调研与生态对比 / Gitee-side landscape survey & positioning
 - [`income-calc-assessment.md`](income-calc-assessment.md) — `income-calc` 优劣势与商业价值评估（含“为何不应继续以它作对标 KPI”的依据与止损判据）/ benchmark & commercial-value assessment
+- [`docs/exposure-content-drafts.md`](docs/exposure-content-drafts.md) — 低成本曝光内容：知乎回答草稿 ×5（数字全部由引擎实算）与发布度量清单 / exposure content: five ready-to-post answers with engine-computed figures
 
 ---
 

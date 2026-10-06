@@ -175,8 +175,8 @@ if os.path.exists(BAT) and os.path.exists(SH):
                  for name, text in (("deploy-pages.bat", bat_text), ("deploy-pages.sh", sh_text))
                  for match in re.finditer(r"\d{2,4}\s*条", text)]
     check(not hardcoded, "neither entry hardcodes an assertion count", str(hardcoded[:4]))
-    for token in ("inline-config", "inline-compute", "inline-xlsx", "test-compute",
-                  "test_xlsx_writer", "test_cli_smoke"):
+    for token in ("inline-config", "inline-compute", "inline-xlsx", "inline-qrcode",
+                  "test-compute", "test-qrcode", "test_xlsx_writer", "test_cli_smoke"):
         check(token in bat_text and token in sh_text, f"both entries run the {token} stage")
     check("check" in bat_text and "check" in sh_text, "both entries document the check mode")
     check("漂移" in bat_text and "漂移" in sh_text, "both entries guard the embedded-copy drift")
